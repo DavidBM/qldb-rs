@@ -39,6 +39,9 @@ impl QLDBTransaction {
     /// Sends a query to QLDB. It will return an Array of IonValues
     /// already decoded. Parameters need to be provided using IonValue.
     pub async fn query(&self, statement: &str, params: Vec<IonValue>) -> QLDBResult<Vec<IonValue>> {
+        if self.complete().await {
+            return Err(QLDBError::TransactionCompleted);
+        }
         // TODO: Add _query to the IonHash
         // TODO: Add _params to the IonHash
         // TODO: If the result is paged, return a object that keeps the page and is able to

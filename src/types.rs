@@ -17,6 +17,8 @@ pub enum QLDBError {
     IonParserError(IonParserError),
     #[error("Error when creating the HttpClient")]
     TlsError(#[from] TlsError),
+    #[error("Transaction has been already commit or rollback")]
+    TransactionCompleted,
 }
 
 pub type QLDBResult<T> = Result<T, QLDBError>;
