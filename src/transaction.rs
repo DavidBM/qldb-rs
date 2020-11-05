@@ -31,29 +31,6 @@ impl QLDBTransaction {
         })
     }
 
-    async fn get_transaction_id(
-        client: &Arc<QldbSessionClient>,
-        session: &str,
-    ) -> QLDBResult<String> {
-        let response = client
-            .send_command(SendCommandRequest {
-                session_token: Some(session.to_string()),
-                start_transaction: Some(StartTransactionRequest {}),
-                ..Default::default()
-            })
-            .await?;
-
-        let token = match response.start_session {
-            Some(session) => match session.session_token {
-                Some(token) => token,
-                None => return Err(QLDBError::QLDBReturnedEmptyTransaction),
-            },
-            None => return Err(QLDBError::QLDBReturnedEmptyTransaction),
-        };
-
-        Ok(token)
-    }
-
     pub async fn query(&self, statement: &str, params: Vec<IonValue>) -> QLDBResult<Vec<IonValue>> {
         // TODO: Add _query to the IonHash
         // TODO: Add _params to the IonHash
@@ -83,18 +60,6 @@ impl QLDBTransaction {
         Ok(values)
     }
 
-    async fn complete(&self) -> bool {
-        let mut is_completed = self.completed.lock().await;
-
-        if *is_completed {
-            return true;
-        }
-
-        *is_completed = true;
-
-        false
-    }
-
     pub async fn commit(&self) -> QLDBResult<()> {
         if self.complete().await {
             return Ok(());
@@ -117,6 +82,41 @@ impl QLDBTransaction {
             .await?;
 
         Ok(())
+    }
+
+    async fn complete(&self) -> bool {
+        let mut is_completed = self.completed.lock().await;
+
+        if *is_completed {
+            return true;
+        }
+
+        *is_completed = true;
+
+        false
+    }
+
+    async fn get_transaction_id(
+        client: &Arc<QldbSessionClient>,
+        session: &str,
+    ) -> QLDBResult<String> {
+        let response = client
+            .send_command(SendCommandRequest {
+                session_token: Some(session.to_string()),
+                start_transaction: Some(StartTransactionRequest {}),
+                ..Default::default()
+            })
+            .await?;
+
+        let token = match response.start_session {
+            Some(session) => match session.session_token {
+                Some(token) => token,
+                None => return Err(QLDBError::QLDBReturnedEmptyTransaction),
+            },
+            None => return Err(QLDBError::QLDBReturnedEmptyTransaction),
+        };
+
+        Ok(token)
     }
 }
 
