@@ -19,7 +19,10 @@ pub struct QLDBTransaction {
 }
 
 impl QLDBTransaction {
-    pub async fn new(client: Arc<QldbSessionClient>, session: &str) -> QLDBResult<QLDBTransaction> {
+    pub(crate) async fn new(
+        client: Arc<QldbSessionClient>,
+        session: &str,
+    ) -> QLDBResult<QLDBTransaction> {
         let transaction_id = QLDBTransaction::get_transaction_id(&client, session).await?;
 
         // TODO: Add transaction_id to the IonHash
@@ -64,7 +67,7 @@ impl QLDBTransaction {
         Ok(values)
     }
 
-    pub async fn commit(&self) -> QLDBResult<()> {
+    pub(crate) async fn commit(&self) -> QLDBResult<()> {
         if self.complete().await {
             return Ok(());
         }
