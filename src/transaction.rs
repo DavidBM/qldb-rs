@@ -79,6 +79,9 @@ impl QLDBTransaction {
         Ok(())
     }
 
+    /// Allows to cancel the transaction. Once rollback is called the
+    /// transaction becomes invalid. Subsequent calls to rollback or
+    /// commit (internally) won't have any effect.
     pub async fn rollback(&self) -> QLDBResult<()> {
         if self.complete().await {
             return Ok(());
