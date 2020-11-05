@@ -1,3 +1,4 @@
+use ion_binary_rs::IonParserError;
 use rusoto_core::RusotoError;
 use rusoto_qldb_session::SendCommandError;
 
@@ -6,6 +7,7 @@ pub enum QLDBError {
     SendCommandError(RusotoError<SendCommandError>),
     QLDBReturnedEmptySession,
     QLDBReturnedEmptyTransaction,
+    IonParserError(IonParserError),
 }
 
 impl From<RusotoError<SendCommandError>> for QLDBError {
