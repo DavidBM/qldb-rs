@@ -58,7 +58,10 @@ impl QLDBClient {
         let result = clousure(transaction.clone()).await;
 
         match result {
-            Ok(result) => Ok(result),
+            Ok(result) => {
+                transaction.commit().await?;
+                Ok(result)
+            }
             Err(error) => {
                 transaction.rollback().await?;
                 Err(error)
