@@ -6,12 +6,11 @@ use rusoto_qldb_session::{
 use std::future::Future;
 use std::sync::Arc;
 
-#[derive(Debug)]
-pub struct CreateClientError {}
-
-pub async fn create_client_from_env(
-    region: Option<Region>,
-) -> Result<QLDBClient, CreateClientError> {
+/// This function will take the credentials from the environtment variables
+/// documented in rusoto:
+/// https://docs.rs/rusoto_credential/0.45.0/rusoto_credential/struct.EnvironmentProvider.html
+/// and create a new QLDBClient.
+pub async fn create_client_from_env(region: Option<Region>) -> QLDBResult<QLDBClient> {
     let region = match region {
         Some(region) => region,
         None => Region::default(),
@@ -20,7 +19,7 @@ pub async fn create_client_from_env(
     let credentials = EnvironmentProvider::default();
 
     // TODO: Map error correctly
-    let http_client = HttpClient::new().map_err(|_e| CreateClientError {})?;
+    let http_client = HttpClient::new()?;
 
     let client = Arc::new(QldbSessionClient::new_with(
         http_client,
@@ -31,18 +30,24 @@ pub async fn create_client_from_env(
     Ok(QLDBClient { client })
 }
 
+/// It allows to start transactions. In QLDB all queries are transactions.
+/// So you always need to create a transaction for every query.
+///
+/// The recomended methos is `transaction_within`.
 #[derive(Clone)]
 pub struct QLDBClient {
     client: Arc<QldbSessionClient>,
 }
 
 impl QLDBClient {
-    pub async fn transaction(&self) -> QLDBResult<QLDBTransaction> {
+    pub(crate) async fn transaction(&self) -> QLDBResult<QLDBTransaction> {
         let session = self.get_session().await?;
 
         Ok(QLDBTransaction::new(self.client.clone(), &session).await?)
     }
 
+    /// It call the clousure providing an alredy made transaction. Once the
+    /// clousure finishes it will call commit or rollback if any error.
     pub async fn transaction_within<F, R, FR>(&self, clousure: F) -> QLDBResult<R>
     where
         FR: Future<Output = QLDBResult<R>>,

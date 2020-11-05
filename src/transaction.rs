@@ -7,6 +7,8 @@ use rusoto_qldb_session::{
 };
 use std::sync::Arc;
 
+/// Every query in QLDB is within a transaction. Ideally you will interact
+/// with this object via the method QLDBClient::transaction_within.
 #[derive(Clone)]
 pub struct QLDBTransaction {
     client: Arc<QldbSessionClient>,
@@ -31,6 +33,8 @@ impl QLDBTransaction {
         })
     }
 
+    /// Sends a query to QLDB. It will return an Array of IonValues
+    /// already decoded. Parameters need to be provided using IonValue.
     pub async fn query(&self, statement: &str, params: Vec<IonValue>) -> QLDBResult<Vec<IonValue>> {
         // TODO: Add _query to the IonHash
         // TODO: Add _params to the IonHash
