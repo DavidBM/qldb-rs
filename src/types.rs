@@ -1,19 +1,22 @@
 use ion_binary_rs::IonParserError;
-use rusoto_core::RusotoError;
+use rusoto_core::{request::TlsError, RusotoError};
 use rusoto_qldb_session::SendCommandError;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum QLDBError {
-    SendCommandError(RusotoError<SendCommandError>),
+    #[error("The QLDB command returned an error")]
+    SendCommandError(#[from] RusotoError<SendCommandError>),
+    #[error("We requested a session but QLDB returned nothing")]
     QLDBReturnedEmptySession,
+    #[error("We requested a transaction id but QLDB returned nothing")]
     QLDBReturnedEmptyTransaction,
+    // TODO: IonParserError seems to not be compatible
+    // with "#[from]". Make it compatible
+    #[error("We requested a transaction id but QLDB returned nothing")]
     IonParserError(IonParserError),
-}
-
-impl From<RusotoError<SendCommandError>> for QLDBError {
-    fn from(err: RusotoError<SendCommandError>) -> QLDBError {
-        QLDBError::SendCommandError(err)
-    }
+    #[error("Error when creating the HttpClient")]
+    TlsError(#[from] TlsError),
 }
 
 pub type QLDBResult<T> = Result<T, QLDBError>;
