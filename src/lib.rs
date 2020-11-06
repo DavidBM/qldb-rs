@@ -1,3 +1,5 @@
+//! # Amazon QLDB Driver
+
 mod client;
 mod transaction;
 mod types;
