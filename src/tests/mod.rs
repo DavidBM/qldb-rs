@@ -8,7 +8,7 @@ async fn test() {
 
     let result = client
         .transaction_within(|client| async move {
-            client.query("", vec![]).await?;
+            client.query("", &vec![]).await?;
             println!("{:?}", test_var);
             Ok("hol")
         })

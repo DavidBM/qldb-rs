@@ -1,5 +1,5 @@
 //! # Amazon's QLDB Driver
-//! 
+//!
 //! Amazon's QLDB driver implemented in pure rust.
 
 mod client;

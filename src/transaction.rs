@@ -5,6 +5,7 @@ use rusoto_qldb_session::{
     ExecuteStatementRequest, QldbSession, QldbSessionClient, SendCommandRequest,
     StartTransactionRequest, ValueHolder,
 };
+use sha2::Sha256;
 use std::sync::Arc;
 
 /// Every query in QLDB is within a transaction. Ideally you will interact
@@ -15,7 +16,7 @@ pub struct QLDBTransaction {
     transaction_id: Arc<String>,
     session: Arc<String>,
     completed: Arc<Mutex<bool>>,
-    hash: Arc<Mutex<IonHash>>,
+    hasher: Arc<Mutex<IonHash>>,
 }
 
 impl QLDBTransaction {
@@ -26,26 +27,25 @@ impl QLDBTransaction {
         let transaction_id = QLDBTransaction::get_transaction_id(&client, session).await?;
 
         // TODO: Add transaction_id to the IonHash
+        let hasher = IonHash::from_ion_value::<Sha256>(&IonValue::String(transaction_id.clone()));
 
         Ok(QLDBTransaction {
             client,
             transaction_id: Arc::new(transaction_id),
             session: Arc::new(session.into()),
             completed: Arc::new(Mutex::new(false)),
-            hash: Arc::new(Mutex::new(IonHash::new())),
+            hasher: Arc::new(Mutex::new(hasher)),
         })
     }
 
     /// Sends a query to QLDB. It will return an Array of IonValues
     /// already decoded. Parameters need to be provided using IonValue.
-    pub async fn query(&self, statement: &str, params: Vec<IonValue>) -> QLDBResult<Vec<IonValue>> {
+    pub async fn query(&self, statement: &str, params: &[IonValue]) -> QLDBResult<Vec<IonValue>> {
         if self.complete().await {
             return Err(QLDBError::TransactionCompleted);
         }
-        // TODO: Add statement to the IonHash
-        // TODO: Add params to the IonHash
-        // TODO: If the result is paged, return a object that keeps the page and is able to
-        //       load the next page and decode the Ion Values
+
+        self.hash_query(statement, &params).await;
 
         let result = self
             .client
@@ -53,9 +53,12 @@ impl QLDBTransaction {
                 &self.session,
                 &self.transaction_id,
                 statement,
-                params,
+                params.to_vec(),
             ))
             .await?;
+
+        // TODO: If the result is paged, return a object that keeps the page and is able to
+        //       load the next page and decode the Ion Values
 
         let values = result
             .execute_statement
@@ -107,6 +110,17 @@ impl QLDBTransaction {
         *is_completed = true;
 
         false
+    }
+
+    async fn hash_query(&self, statement: &str, params: &[IonValue]) {
+        let mut hasher =
+            IonHash::from_ion_value::<Sha256>(&IonValue::String(statement.to_string()));
+
+        for param in params {
+            hasher.add_ion_value(param);
+        }
+
+        self.hasher.lock().await.dot(hasher);
     }
 
     async fn get_transaction_id(

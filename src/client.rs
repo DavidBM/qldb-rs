@@ -1,7 +1,7 @@
 use crate::{QLDBError, QLDBResult, QLDBTransaction};
 use rusoto_core::{credential::EnvironmentProvider, request::HttpClient, Region};
 use rusoto_qldb_session::{
-    QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest, EndSessionRequest
+    EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest,
 };
 use std::future::Future;
 use std::sync::Arc;
@@ -72,13 +72,10 @@ impl QLDBClient {
     }
 
     async fn close_session(&self, session: &str) -> QLDBResult<()> {
-        self
-            .client
+        self.client
             .send_command(SendCommandRequest {
                 session_token: Some(session.to_string()),
-                end_session: Some(EndSessionRequest {
-                    
-                }),
+                end_session: Some(EndSessionRequest {}),
                 ..Default::default()
             })
             .await?;
