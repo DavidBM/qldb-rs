@@ -42,8 +42,8 @@ impl QLDBTransaction {
         if self.complete().await {
             return Err(QLDBError::TransactionCompleted);
         }
-        // TODO: Add _query to the IonHash
-        // TODO: Add _params to the IonHash
+        // TODO: Add statement to the IonHash
+        // TODO: Add params to the IonHash
         // TODO: If the result is paged, return a object that keeps the page and is able to
         //       load the next page and decode the Ion Values
 
@@ -130,6 +130,10 @@ impl QLDBTransaction {
         };
 
         Ok(token)
+    }
+
+    pub(crate) fn get_session(&self) -> &str {
+        &self.session
     }
 }
 
