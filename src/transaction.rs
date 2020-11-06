@@ -45,6 +45,9 @@ impl QLDBTransaction {
             return Err(QLDBError::TransactionCompleted);
         }
 
+        // TODO: hash_query may be an expesive operation, maybe 
+        // we want to move to a task and execute it in parallel
+        // with the waiting of the send_command. 
         self.hash_query(statement, &params).await;
 
         let result = self
