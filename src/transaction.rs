@@ -45,9 +45,9 @@ impl QLDBTransaction {
             return Err(QLDBError::TransactionCompleted);
         }
 
-        // TODO: hash_query may be an expesive operation, maybe 
+        // TODO: hash_query may be an expesive operation, maybe
         // we want to move to a task and execute it in parallel
-        // with the waiting of the send_command. 
+        // with the waiting of the send_command.
         self.hash_query(statement, &params).await;
 
         let result = self
@@ -60,8 +60,8 @@ impl QLDBTransaction {
             ))
             .await?;
 
-        // TODO: If the result is paged, return a object that keeps the page and is able to
-        //       load the next page and decode the Ion Values
+        // TODO: If the result is paged, return a object that keeps the page and
+        // is able to load the next page and decode the Ion Values.
 
         let values = result
             .execute_statement
@@ -84,6 +84,9 @@ impl QLDBTransaction {
         self.client
             .send_command(SendCommandRequest::default())
             .await?;
+
+        // TODO: Check the returned CommitDigest with the
+        // current hash and failt if they are not equal.
 
         Ok(())
     }
