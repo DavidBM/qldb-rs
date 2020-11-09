@@ -2,8 +2,8 @@ use crate::types::{QLDBError, QLDBResult};
 use futures::lock::Mutex;
 use ion_binary_rs::{IonEncoder, IonHash, IonParser, IonValue};
 use rusoto_qldb_session::{
-    ExecuteStatementRequest, QldbSession, QldbSessionClient, SendCommandRequest,
-    StartTransactionRequest, ValueHolder,
+    CommitTransactionRequest, ExecuteStatementRequest, QldbSession, QldbSessionClient,
+    SendCommandRequest, StartTransactionRequest, ValueHolder, AbortTransactionRequest
 };
 use sha2::Sha256;
 use std::sync::Arc;
@@ -41,7 +41,7 @@ impl QLDBTransaction {
     /// Sends a query to QLDB. It will return an Array of IonValues
     /// already decoded. Parameters need to be provided using IonValue.
     pub async fn query(&self, statement: &str, params: &[IonValue]) -> QLDBResult<Vec<IonValue>> {
-        if self.complete().await {
+        if self.is_completed().await {
             return Err(QLDBError::TransactionCompleted);
         }
 
@@ -81,9 +81,21 @@ impl QLDBTransaction {
             return Ok(());
         }
 
-        self.client
-            .send_command(SendCommandRequest::default())
-            .await?;
+        let commit_digest = self.hasher.lock().await.get().to_owned();
+
+        let result = self.client
+            .send_command(SendCommandRequest {
+                session_token: Some(self.session.to_string()),
+                commit_transaction: Some(CommitTransactionRequest {
+                    transaction_id: self.transaction_id.to_string(),
+                    commit_digest: commit_digest.clone().into(),
+                }),
+                ..Default::default()
+            })
+            .await;
+
+        result?;
+
 
         // TODO: Check the returned CommitDigest with the
         // current hash and failt if they are not equal.
@@ -100,7 +112,11 @@ impl QLDBTransaction {
         }
 
         self.client
-            .send_command(SendCommandRequest::default())
+            .send_command(SendCommandRequest {
+                session_token: Some(self.session.to_string()),
+                abort_transaction: Some(AbortTransactionRequest {}),
+                ..Default::default()
+            })
             .await?;
 
         Ok(())
@@ -118,11 +134,24 @@ impl QLDBTransaction {
         false
     }
 
+    async fn is_completed(&self) -> bool {
+        let is_completed = self.completed.lock().await;
+
+        if *is_completed {
+            return true;
+        }
+
+        false
+    }
+
     async fn hash_query(&self, statement: &str, params: &[IonValue]) {
         let mut hasher =
             IonHash::from_ion_value::<Sha256>(&IonValue::String(statement.to_string()));
-
         for param in params {
+            let mut encoder = IonEncoder::new();
+            encoder.add(param.clone());
+
+
             hasher.add_ion_value(param);
         }
 
@@ -141,8 +170,8 @@ impl QLDBTransaction {
             })
             .await?;
 
-        let token = match response.start_session {
-            Some(session) => match session.session_token {
+        let token = match response.start_transaction {
+            Some(session) => match session.transaction_id {
                 Some(token) => token,
                 None => return Err(QLDBError::QLDBReturnedEmptyTransaction),
             },
