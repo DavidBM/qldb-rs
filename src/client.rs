@@ -18,22 +18,22 @@ pub struct QLDBClient {
 
 impl QLDBClient {
     /// Creates a new QLDBClient.
-    /// 
+    ///
     /// This function will take the credentials from several locations in this order:
-    /// 
+    ///
     ///  - Environment variables: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
     ///  - credential_process command in the AWS config file, usually located at ~/.aws/config.
     ///  - AWS credentials file. Usually located at ~/.aws/credentials.
     ///  - IAM instance profile. Will only work if running on an EC2 instance with an instance profile/role.
-    /// 
+    ///
     /// [ttps://docs.rs/rusoto_credential/0.45.0/rusoto_credential/struct.ChainProvider.html](ttps://docs.rs/rusoto_credential/0.45.0/rusoto_credential/struct.ChainProvider.html)
-    /// 
-    /// For the region it will will attempt to read the AWS_DEFAULT_REGION or AWS_REGION 
-    /// environment variable. If it is malformed, it will fall back to Region::UsEast1. 
-    /// If it is not present it will fallback on the value associated with the current 
-    /// profile in ~/.aws/config or the file specified by the AWS_CONFIG_FILE environment 
+    ///
+    /// For the region it will will attempt to read the AWS_DEFAULT_REGION or AWS_REGION
+    /// environment variable. If it is malformed, it will fall back to Region::UsEast1.
+    /// If it is not present it will fallback on the value associated with the current
+    /// profile in ~/.aws/config or the file specified by the AWS_CONFIG_FILE environment
     /// variable. If that is malformed of absent it will fall back on Region::UsEast1
-    /// 
+    ///
     pub async fn default(ledger_name: &str) -> QLDBResult<QLDBClient> {
         let region = Region::default();
 
@@ -48,7 +48,10 @@ impl QLDBClient {
             region,
         ));
 
-        Ok(QLDBClient { client, ledger_name: ledger_name.to_string() })
+        Ok(QLDBClient {
+            client,
+            ledger_name: ledger_name.to_string(),
+        })
     }
 
     pub(crate) async fn transaction(&self) -> QLDBResult<QLDBTransaction> {

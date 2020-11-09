@@ -2,8 +2,8 @@ use crate::types::{QLDBError, QLDBResult};
 use futures::lock::Mutex;
 use ion_binary_rs::{IonEncoder, IonHash, IonParser, IonValue};
 use rusoto_qldb_session::{
-    CommitTransactionRequest, ExecuteStatementRequest, QldbSession, QldbSessionClient,
-    SendCommandRequest, StartTransactionRequest, ValueHolder, AbortTransactionRequest
+    AbortTransactionRequest, CommitTransactionRequest, ExecuteStatementRequest, QldbSession,
+    QldbSessionClient, SendCommandRequest, StartTransactionRequest, ValueHolder,
 };
 use sha2::Sha256;
 use std::sync::Arc;
@@ -83,7 +83,8 @@ impl QLDBTransaction {
 
         let commit_digest = self.hasher.lock().await.get().to_owned();
 
-        let result = self.client
+        let result = self
+            .client
             .send_command(SendCommandRequest {
                 session_token: Some(self.session.to_string()),
                 commit_transaction: Some(CommitTransactionRequest {
@@ -95,7 +96,6 @@ impl QLDBTransaction {
             .await;
 
         result?;
-
 
         // TODO: Check the returned CommitDigest with the
         // current hash and failt if they are not equal.
@@ -150,7 +150,6 @@ impl QLDBTransaction {
         for param in params {
             let mut encoder = IonEncoder::new();
             encoder.add(param.clone());
-
 
             hasher.add_ion_value(param);
         }
