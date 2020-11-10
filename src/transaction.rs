@@ -85,14 +85,11 @@ impl QLDBTransaction {
 
         let result = self
             .client
-            .send_command(SendCommandRequest {
-                session_token: Some(self.session.to_string()),
-                commit_transaction: Some(CommitTransactionRequest {
-                    transaction_id: self.transaction_id.to_string(),
-                    commit_digest: commit_digest.clone().into(),
-                }),
-                ..Default::default()
-            })
+            .send_command(create_commit_command(
+                &self.session,
+                &self.transaction_id,
+                &commit_digest
+            ))
             .await;
 
         result?;
@@ -112,11 +109,7 @@ impl QLDBTransaction {
         }
 
         self.client
-            .send_command(SendCommandRequest {
-                session_token: Some(self.session.to_string()),
-                abort_transaction: Some(AbortTransactionRequest {}),
-                ..Default::default()
-            })
+            .send_command(create_rollback_command(&self.session))
             .await?;
 
         Ok(())
@@ -162,11 +155,7 @@ impl QLDBTransaction {
         session: &str,
     ) -> QLDBResult<String> {
         let response = client
-            .send_command(SendCommandRequest {
-                session_token: Some(session.to_string()),
-                start_transaction: Some(StartTransactionRequest {}),
-                ..Default::default()
-            })
+            .send_command(create_start_transaction_command(session))
             .await?;
 
         let token = match response.start_transaction {
@@ -233,6 +222,41 @@ fn create_send_command(
             parameters: Some(params.into_iter().map(ionvalue_to_valueholder).collect()),
             transaction_id: transaction_id.to_string(),
         }),
+        ..Default::default()
+    }
+}
+
+fn create_commit_command(
+    session: &str,
+    transaction_id: &str,
+    commit_digest: &[u8],
+) -> SendCommandRequest {
+    SendCommandRequest {
+        session_token: Some(session.to_string()),
+        commit_transaction: Some(CommitTransactionRequest {
+            transaction_id: transaction_id.to_string(),
+            commit_digest: commit_digest.to_owned().into(),
+        }),
+        ..Default::default()
+    }
+}
+
+fn create_rollback_command(
+    session: &str,
+) -> SendCommandRequest {
+    SendCommandRequest {
+        session_token: Some(session.to_string()),
+        abort_transaction: Some(AbortTransactionRequest {}),
+        ..Default::default()
+    }
+}
+
+fn create_start_transaction_command(
+    session: &str,
+) -> SendCommandRequest {
+    SendCommandRequest {
+        session_token: Some(session.to_string()),
+        start_transaction: Some(StartTransactionRequest {}),
         ..Default::default()
     }
 }
