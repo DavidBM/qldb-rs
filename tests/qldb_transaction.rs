@@ -1,3 +1,6 @@
+use rusoto_core::RusotoError::Service;
+use rusoto_qldb_session::SendCommandError::OccConflict;
+use qldb::QLDBError::SendCommandError;
 use eyre::Result;
 use ion_binary_rs::IonValue;
 use qldb::QLDBClient;
@@ -30,17 +33,8 @@ async fn qldb_transaction() -> Result<()> {
                 _ => panic!("First count returned a non integer"),
             };
 
-            let value_to_insert = {
-                let mut map = HashMap::new();
-                map.insert(
-                    "test_column".to_string(),
-                    IonValue::String("test_value".to_string()),
-                );
-                IonValue::Struct(map)
-            };
-
             let result = client
-                .query(&format!("INSERT INTO {} VALUE ?", test_table), &[value_to_insert])
+                .query(&format!("INSERT INTO {} VALUE ?", test_table), &[get_value_to_insert()])
                 .await;
 
             println!("{:?}", result);
@@ -98,17 +92,8 @@ async fn qldb_transaction_rollback() -> Result<()> {
             let test_table = test_table.clone();
             async move {
 
-                let value_to_insert = {
-                    let mut map = HashMap::new();
-                    map.insert(
-                        "test_column".to_string(),
-                        IonValue::String("test_value".to_string()),
-                    );
-                    IonValue::Struct(map)
-                };
-
                 let _ = client
-                    .query(&format!("INSERT INTO {} VALUE ?", test_table), &[value_to_insert])
+                    .query(&format!("INSERT INTO {} VALUE ?", test_table), &[get_value_to_insert()])
                     .await;
 
                 client.rollback().await
@@ -145,6 +130,73 @@ async fn qldb_transaction_rollback() -> Result<()> {
     Ok(())
 }
 
+#[async_std::test]
+async fn qldb_transaction_occ_conflict() -> Result<()> {
+    let client = QLDBClient::default("rust-crate-test").await?;
+
+    let test_table = ensure_test_table(&client).await;
+
+
+    let future_a = client
+        .transaction_within(|client| {
+            let test_table = test_table.clone();
+            async move {
+                // Select the whole table. This will block everything in it.
+                client
+                    .query(&format!(r#"SELECT COUNT(*) FROM {};"#, test_table), &[])
+                    .await?;
+
+                // Let's wait for the other transaction to change some data 
+                async_std::task::sleep(std::time::Duration::from_millis(500)).await;
+
+                Ok(())
+
+                // At this point the data should have changed so the transaction
+                // should fail when commited. NOTE: In a normal environtment, when
+                // doing just a SELECT you don't care, but when adding INSERTs 
+                // after it you want the transaction (INSERTs) to fail.
+            }
+        });
+
+    let future_b = client
+        .transaction_within(|client| {
+            let test_table = test_table.clone();
+            async move {
+                async_std::task::sleep(std::time::Duration::from_millis(100)).await;
+
+                client
+                    .query(&format!("INSERT INTO {} VALUE ?", test_table), &[get_value_to_insert()])
+                    .await?;
+
+                Ok(())
+            }
+        });
+
+    let result = futures::join!(future_a, future_b);
+
+    if result.1.is_err() {
+        panic!("OCC test failed in the wrong trasaction.")
+    }
+
+    match result.0 {
+        Err(SendCommandError(Service(OccConflict(_)))) => {},
+        _ => panic!("Non OCC error on the OCC test!")
+    }
+
+    Ok(())
+}
+
+#[async_std::test]
+async fn qldb_transaction_simple_select() -> Result<()> {
+    let client = QLDBClient::default("rust-crate-test").await?;
+
+    let test_table = ensure_test_table(&client).await;
+
+    client.select(&format!(r#"SELECT COUNT(*) FROM {};"#, test_table), &[]).await.unwrap();
+
+    Ok(())
+}
+
 async fn ensure_test_table(client: &QLDBClient) -> String {
     let _ = client
         .transaction_within(|client| async move {
@@ -156,4 +208,15 @@ async fn ensure_test_table(client: &QLDBClient) -> String {
         .await;
 
     "QldbLibRsTest".to_string()
+}
+
+fn get_value_to_insert() -> IonValue {
+
+    let mut map = HashMap::new();
+    map.insert(
+        "test_column".to_string(),
+        IonValue::String("test_value".to_string()),
+    );
+    IonValue::Struct(map)
+
 }

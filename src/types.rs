@@ -19,6 +19,10 @@ pub enum QLDBError {
     TlsError(#[from] TlsError),
     #[error("Transaction has been already commit or rollback")]
     TransactionCompleted,
+    #[error("We weren't able to send the result value to ourselves. This is a bug.")]
+    InternalChannelSendError,
+    #[error("We weren't able to receive the result value from ourselves. This is a bug.")]
+    InternalChannelRecvError(async_channel::RecvError),
 }
 
 pub type QLDBResult<T> = Result<T, QLDBError>;
