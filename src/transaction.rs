@@ -76,6 +76,31 @@ impl QLDBTransaction {
         Ok(values)
     }
 
+    /// Sends a query to QLDB that returns a count. Keep in mind that there isn't
+    /// any filter to fail is another kind of statement is given.
+    /// 
+    /// Be careful with COUNT statements as they "block" the whole table and other
+    /// transactions affecting the same table will return an OCC error when committed.
+    /// 
+    /// If you want to make a simple count, it is better to use the count method 
+    /// from [Client::count](./struct.QLDBClient.html#method.count) 
+    /// 
+    pub async fn count(&self, statement: &str, params: &[IonValue]) -> QLDBResult<i64> {
+        if self.is_completed().await {
+            return Err(QLDBError::TransactionCompleted);
+        }
+
+        let result = self.query(statement, params).await?;
+
+        match result.last() {
+            Some(IonValue::Struct(data)) => match data.get("_1") {
+                Some(IonValue::Integer(count)) => Ok(*count),
+                _ => Err(QLDBError::NonValidCountStatementResult),
+            },
+            _ => Err(QLDBError::NonValidCountStatementResult),
+        }
+    }
+
     pub(crate) async fn commit(&self) -> QLDBResult<()> {
         if self.complete().await {
             return Ok(());
@@ -100,7 +125,7 @@ impl QLDBTransaction {
         Ok(())
     }
 
-    /// Allows to cancel the transaction. Once rollback is called the
+    /// Cancels the transaction. Once rollback is called the
     /// transaction becomes invalid. Subsequent calls to rollback or
     /// commit (internally) won't have any effect.
     pub async fn rollback(&self) -> QLDBResult<()> {

@@ -55,17 +55,40 @@ impl QLDBClient {
         })
     }
 
-    // Shorthand method that creates a transaction and executes an SELECT.
-    // Currently it doesn't filter by statements, so any statement can be
-    // sent but it won't have effect as it will rollback any change.
-    // 
-    // This is a good option when you want to execute an isolated non-ACID
-    // SELECT statement.
+    /// Shorthand method that creates a transaction and executes an SELECT.
+    /// Currently it doesn't filter by statements, so any statement can be
+    /// sent but it won't have effect as it will rollback any change.
+    /// 
+    /// This is a good option when you want to execute an isolated non-ACID
+    /// SELECT statement.
     pub async fn select(&self, statement: &str, params: &[IonValue]) -> QLDBResult<Vec<IonValue>> {
 
         let transaction = self.transaction().await?;
 
         let value = transaction.query(statement, params).await?;
+
+        // We don't care if the rollback fails as we have the result.
+        // TODO: We don't need to wait for the rollback to finish, 
+        // we should move it to a thread-pool or local executor to 
+        // rollback the transaction and return the result earlier.
+        let _ = transaction.rollback().await;
+
+        Ok(value)
+    }
+
+    /// Shorthand method that creates a transaction and executes an SELECT
+    /// with one unique COUNT on it. Currently it doesn't filter by statements, 
+    /// so any statement can be sent but it won't have effect as it will 
+    /// rollback any change. If the result of the statement is not only 
+    /// one count result it will return an error.
+    /// 
+    /// This is a good option when you want to execute an isolated non-ACID
+    /// SELECT statement.
+    pub async fn count(&self, statement: &str, params: &[IonValue]) -> QLDBResult<i64> {
+
+        let transaction = self.transaction().await?;
+
+        let value = transaction.count(statement, params).await?;
 
         // We don't care if the rollback fails as we have the result.
         // TODO: We don't need to wait for the rollback to finish, 

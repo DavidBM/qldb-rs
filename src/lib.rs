@@ -14,6 +14,32 @@
 //! RUST_TEST_THREADS=1 cargo test
 //! ```
 //! 
+//! ```rust,no_run
+//! 
+//! use qldb::QLDBClient;
+//! let client = QLDBClient::default("rust-crate-test").await?;
+//! 
+//! let mut map = HashMap::new();
+//! map.insert(
+//!     "test_column".to_string(),
+//!     IonValue::String("test_value".to_string()),
+//! );
+//! IonValue::Struct(map)
+//! 
+//! client
+//!     .transaction_within(|client| {
+//!         let test_table = test_table.clone();
+//!         async move {
+//!             
+//!             let _ = client
+//!                 .query(&format!("INSERT INTO {} VALUE ?", test_table), &[get_value_to_insert()])
+//!                 .await;
+//!                 
+//!             client.rollback().await
+//!         }
+//!     })
+//!     .await?;
+//! ```
 
 mod client;
 mod transaction;

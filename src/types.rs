@@ -23,6 +23,8 @@ pub enum QLDBError {
     InternalChannelSendError,
     #[error("We weren't able to receive the result value from ourselves. This is a bug.")]
     InternalChannelRecvError(async_channel::RecvError),
+    #[error("The statement provided to the count method didn't return what a normal SELECT COUNT(... would have returned.")]
+    NonValidCountStatementResult,
 }
 
 pub type QLDBResult<T> = Result<T, QLDBError>;
