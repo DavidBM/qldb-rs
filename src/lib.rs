@@ -1,21 +1,15 @@
 //! # Amazon's QLDB Driver
 //!
-//! Amazon's QLDB driver implemented in pure rust.
+//! Driver for Amazon's QLDB Database implemented in pure rust.
 //! 
-//! # Test
+//! [![Coverage Status](https://coveralls.io/repos/github/Couragium/qldb/badge.svg?branch=master)](https://coveralls.io/github/Couragium/qldb?branch=master)
+//! [![Buils Status](https://github.com/Couragium/qldb/workflows/Rust/badge.svg)](https://github.com/Couragium/qldb/actions)
+//! [![Documentation](https://docs.rs/qldb/badge.svg)](https://docs.rs/qldb)
+//! [![Crates.io](https://img.shields.io/crates/v/qldb)](https://crates.io/crates/qldb)
 //! 
-//! For tests you will need to have some AWS credentials in your 
-//! PC (as env variables or in ~/.aws/credentials). There needs
-//! to be a QLDB database with the name "rust-crate-test" in the 
-//! aws account. The tests need to be run sequentially, so in order 
-//! to run the tests please run the following command:
-//! 
-//! ```sh
-//! RUST_TEST_THREADS=1 cargo test
-//! ```
+//! ## Example
 //! 
 //! ```rust,no_run
-//! 
 //! use qldb::QLDBClient;
 //! let client = QLDBClient::default("rust-crate-test").await?;
 //! 
@@ -39,6 +33,18 @@
 //!         }
 //!     })
 //!     .await?;
+//! ```
+//! 
+//! # Test
+//! 
+//! For tests you will need to have some AWS credentials in your 
+//! PC (as env variables or in ~/.aws/credentials). There needs
+//! to be a QLDB database with the name "rust-crate-test" in the 
+//! aws account. The tests need to be run sequentially, so in order 
+//! to run the tests please run the following command:
+//! 
+//! ```sh
+//! RUST_TEST_THREADS=1 cargo test
 //! ```
 
 mod client;
