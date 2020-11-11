@@ -2,8 +2,6 @@
 //!
 //! Driver for Amazon's QLDB Database implemented in pure rust.
 //! 
-//! [![Coverage Status](https://coveralls.io/repos/github/Couragium/qldb/badge.svg?branch=master)](https://coveralls.io/github/Couragium/qldb?branch=master)
-//! [![Buils Status](https://github.com/Couragium/qldb/workflows/Rust/badge.svg)](https://github.com/Couragium/qldb/actions)
 //! [![Documentation](https://docs.rs/qldb/badge.svg)](https://docs.rs/qldb)
 //! [![Crates.io](https://img.shields.io/crates/v/qldb)](https://crates.io/crates/qldb)
 //! 
