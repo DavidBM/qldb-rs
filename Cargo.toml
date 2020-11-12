@@ -1,0 +1,29 @@
+[package]
+name = "qldb"
+version = "0.1.1"
+authors = ["Couragium Solutions <info@couragium.com>"]
+edition = "2018"
+
+description="Driver for Amazon's QLDB Database implemented in pure rust."
+license = "Apache-2.0/MIT"
+readme = "README.md"
+keywords = ["QLDB", "amazon", "database", "driver", "async"]
+categories = ["database"]
+documentation = "https://docs.rs/qldb"
+homepage = "https://crates.io/crates/qldb"
+repository = "https://github.com/Couragium/qldb-rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ion-binary-rs = "0.4.1"
+rusoto_qldb_session = { version = "0.45.0", default_features = false, features = ["rustls", "serialize_structs", "deserialize_structs"] }
+rusoto_core = { version = "0.45.0", default_features = false, features = ["rustls"] }
+futures = "0.3.7"
+thiserror = "1.0.22"
+sha2 = "0.9.2"
+async-channel = "1.5.1"
+
+[dev-dependencies]
+async-std = { version = "1.7.0", features = ["attributes", "tokio02"] }
+eyre = "0.6.2"
