@@ -8,7 +8,13 @@
 //! ## Example
 //! 
 //! ```rust,no_run
+//! use async_std::task::spawn;
 //! use qldb::QLDBClient;
+//! use std::collections::HashMap;
+//! use ion_binary_rs::IonValue;
+//! # use eyre::Result;
+//! 
+//! # async fn test() -> Result<()> {
 //! let client = QLDBClient::default("rust-crate-test").await?;
 //! 
 //! let mut map = HashMap::new();
@@ -16,21 +22,20 @@
 //!     "test_column".to_string(),
 //!     IonValue::String("test_value".to_string()),
 //! );
-//! IonValue::Struct(map)
+//! let value_to_insert = IonValue::Struct(map);
 //! 
 //! client
-//!     .transaction_within(|client| {
-//!         let test_table = test_table.clone();
-//!         async move {
-//!             
-//!             let _ = client
-//!                 .query(&format!("INSERT INTO {} VALUE ?", test_table), &[get_value_to_insert()])
-//!                 .await;
-//!                 
-//!             client.rollback().await
-//!         }
+//!     .transaction_within(|client| async move {   
+//!         client
+//!             .query("INSERT INTO Accounts VALUE ?", &[value_to_insert])
+//!             .await?;
+//!         Ok(())
 //!     })
 //!     .await?;
+//! 
+//! # Ok(())
+//! # }
+//! 
 //! ```
 //! 
 //! # Test
