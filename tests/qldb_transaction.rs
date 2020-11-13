@@ -220,10 +220,6 @@ async fn qldb_type_nulls() -> Result<()> {
             &IonValue::Null(NullIonValue::Integer)
         );
         assert_eq!(
-            values.get("BigInteger").unwrap(),
-            &IonValue::Null(NullIonValue::Integer)
-        );
-        assert_eq!(
             values.get("Float").unwrap(),
             &IonValue::Null(NullIonValue::Float)
         );
@@ -262,6 +258,37 @@ async fn qldb_type_nulls() -> Result<()> {
         assert_eq!(
             values.get("Struct").unwrap(),
             &IonValue::Null(NullIonValue::Struct)
+        );
+    })
+    .await
+}
+
+#[async_std::test]
+async fn qldb_type_datetime() -> Result<()> {
+    create_type_test(get_value_to_insert_dates(), |values| {
+        assert_eq!(
+            values.get("2011-01-01T00:00:00+00:00").unwrap(),
+            &IonValue::DateTime(
+                chrono::DateTime::parse_from_rfc3339("2011-01-01T00:00:00+00:00").unwrap()
+            )
+        );
+        assert_eq!(
+            values.get("2011-02-01T00:00:00+00:00").unwrap(),
+            &IonValue::DateTime(
+                chrono::DateTime::parse_from_rfc3339("2011-02-01T00:00:00+00:00").unwrap()
+            )
+        );
+        assert_eq!(
+            values.get("2011-02-20T00:00:00+00:00").unwrap(),
+            &IonValue::DateTime(
+                chrono::DateTime::parse_from_rfc3339("2011-02-20T00:00:00+00:00").unwrap()
+            )
+        );
+        assert_eq!(
+            values.get("2011-02-20T11:30:59.100-08:00").unwrap(),
+            &IonValue::DateTime(
+                chrono::DateTime::parse_from_rfc3339("2011-02-20T11:30:59.100-08:00").unwrap()
+            )
         );
     })
     .await
@@ -350,10 +377,6 @@ fn get_value_to_insert_nulls() -> IonValue {
     map.insert("Null".into(), IonValue::Null(NullIonValue::Null));
     map.insert("Bool".into(), IonValue::Null(NullIonValue::Bool));
     map.insert("Integer".into(), IonValue::Null(NullIonValue::Integer));
-    map.insert(
-        "BigInteger".into(),
-        IonValue::Null(NullIonValue::BigInteger),
-    );
     map.insert("Float".into(), IonValue::Null(NullIonValue::Float));
     map.insert("Decimal".into(), IonValue::Null(NullIonValue::Decimal));
     map.insert("DateTime".into(), IonValue::Null(NullIonValue::DateTime));
@@ -366,5 +389,34 @@ fn get_value_to_insert_nulls() -> IonValue {
     map.insert("Struct".into(), IonValue::Null(NullIonValue::Struct));
     // Null annotation here would be illegal
     //map.insert("Annotation".into(), IonValue::Null(NullIonValue::Annotation));
+    IonValue::Struct(map)
+}
+
+fn get_value_to_insert_dates() -> IonValue {
+    let mut map = HashMap::new();
+    map.insert(
+        "2011-01-01T00:00:00+00:00".into(),
+        IonValue::DateTime(
+            chrono::DateTime::parse_from_rfc3339("2011-01-01T00:00:00+00:00").unwrap(),
+        ),
+    );
+    map.insert(
+        "2011-02-01T00:00:00+00:00".into(),
+        IonValue::DateTime(
+            chrono::DateTime::parse_from_rfc3339("2011-02-01T00:00:00+00:00").unwrap(),
+        ),
+    );
+    map.insert(
+        "2011-02-20T00:00:00+00:00".into(),
+        IonValue::DateTime(
+            chrono::DateTime::parse_from_rfc3339("2011-02-20T00:00:00+00:00").unwrap(),
+        ),
+    );
+    map.insert(
+        "2011-02-20T11:30:59.100-08:00".into(),
+        IonValue::DateTime(
+            chrono::DateTime::parse_from_rfc3339("2011-02-20T11:30:59.100-08:00").unwrap(),
+        ),
+    );
     IonValue::Struct(map)
 }
