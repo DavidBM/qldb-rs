@@ -21,8 +21,6 @@ pub enum QLDBError {
     TransactionCompleted,
     #[error("We weren't able to send the result value to ourselves. This is a bug.")]
     InternalChannelSendError,
-    #[error("We weren't able to receive the result value from ourselves. This is a bug.")]
-    InternalChannelRecvError(async_channel::RecvError),
     #[error("The statement provided to the count method didn't return what a normal SELECT COUNT(... would have returned.")]
     NonValidCountStatementResult,
 }
