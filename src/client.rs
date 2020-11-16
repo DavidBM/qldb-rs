@@ -1,5 +1,4 @@
-use ion_binary_rs::IonValue;
-use crate::{QLDBError, QLDBResult, QLDBTransaction};
+use crate::{QLDBError, QLDBResult, QueryBuilder, Transaction};
 use rusoto_core::{credential::ChainProvider, request::HttpClient, Region};
 use rusoto_qldb_session::{
     EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest,
@@ -10,7 +9,7 @@ use std::sync::Arc;
 /// It allows to start transactions. In QLDB all queries are transactions.
 /// So you always need to create a transaction for every query.
 ///
-/// The recomended methos is `transaction_within`.
+/// The recommended method is `transaction_within`.
 #[derive(Clone)]
 pub struct QLDBClient {
     client: Arc<QldbSessionClient>,
@@ -55,54 +54,30 @@ impl QLDBClient {
         })
     }
 
-    /// Shorthand method that creates a transaction and executes an SELECT.
+    /// Shorthand method that creates a transaction and executes a query.
     /// Currently it doesn't filter by statements, so any statement can be
-    /// sent but it won't have effect as it will rollback any change.
-    /// 
+    /// sent but it won't have effect as it will rollback any change. This
+    /// allows to read big quantities of data without failing other
+    /// transactions that may be reading that data at the same time.
+    ///
     /// This is a good option when you want to execute an isolated non-ACID
-    /// SELECT statement.
-    pub async fn select(&self, statement: &str, params: &[IonValue]) -> QLDBResult<Vec<IonValue>> {
+    /// SELECT/COUNT statement.
+    pub async fn read_query(&self, statement: &str) -> QLDBResult<QueryBuilder> {
+        let transaction = self.auto_rollback_transaction().await?;
 
-        let transaction = self.transaction().await?;
-
-        let value = transaction.query(statement, params).await?;
-
-        // We don't care if the rollback fails as we have the result.
-        // TODO: We don't need to wait for the rollback to finish, 
-        // we should move it to a thread-pool or local executor to 
-        // rollback the transaction and return the result earlier.
-        let _ = transaction.rollback().await;
-
-        Ok(value)
+        Ok(transaction.query(statement))
     }
 
-    /// Shorthand method that creates a transaction and executes an SELECT
-    /// with one unique COUNT on it. Currently it doesn't filter by statements, 
-    /// so any statement can be sent but it won't have effect as it will 
-    /// rollback any change. If the result of the statement is not only 
-    /// one count result it will return an error.
-    /// 
-    /// This is a good option when you want to execute an isolated non-ACID
-    /// SELECT statement.
-    pub async fn count(&self, statement: &str, params: &[IonValue]) -> QLDBResult<i64> {
-
-        let transaction = self.transaction().await?;
-
-        let value = transaction.count(statement, params).await?;
-
-        // We don't care if the rollback fails as we have the result.
-        // TODO: We don't need to wait for the rollback to finish, 
-        // we should move it to a thread-pool or local executor to 
-        // rollback the transaction and return the result earlier.
-        let _ = transaction.rollback().await;
-
-        Ok(value)
-    }
-
-    pub(crate) async fn transaction(&self) -> QLDBResult<QLDBTransaction> {
+    pub(crate) async fn transaction(&self) -> QLDBResult<Transaction> {
         let session = self.get_session().await?;
 
-        Ok(QLDBTransaction::new(self.client.clone(), &session).await?)
+        Ok(Transaction::new(self.client.clone(), &session, false).await?)
+    }
+
+    pub(crate) async fn auto_rollback_transaction(&self) -> QLDBResult<Transaction> {
+        let session = self.get_session().await?;
+
+        Ok(Transaction::new(self.client.clone(), &session, true).await?)
     }
 
     /// It call the closure providing an already made transaction. Once the
@@ -111,7 +86,7 @@ impl QLDBClient {
     where
         R: std::fmt::Debug,
         FR: Future<Output = QLDBResult<R>>,
-        F: FnOnce(QLDBTransaction) -> FR,
+        F: FnOnce(Transaction) -> FR,
     {
         let transaction = self.transaction().await?;
 
