@@ -266,9 +266,7 @@ fn create_commit_command(
     }
 }
 
-fn create_rollback_command(
-    session: &str,
-) -> SendCommandRequest {
+fn create_rollback_command(session: &str) -> SendCommandRequest {
     SendCommandRequest {
         session_token: Some(session.to_string()),
         abort_transaction: Some(AbortTransactionRequest {}),
@@ -276,9 +274,7 @@ fn create_rollback_command(
     }
 }
 
-fn create_start_transaction_command(
-    session: &str,
-) -> SendCommandRequest {
+fn create_start_transaction_command(session: &str) -> SendCommandRequest {
     SendCommandRequest {
         session_token: Some(session.to_string()),
         start_transaction: Some(StartTransactionRequest {}),
