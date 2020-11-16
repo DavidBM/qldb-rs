@@ -16,13 +16,12 @@ repository = "https://github.com/Couragium/qldb-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ion-binary-rs = "0.5.1"
+ion-binary-rs = "0.6.0"
 rusoto_qldb_session = { version = "0.45.0", default_features = false, features = ["rustls", "serialize_structs", "deserialize_structs"] }
 rusoto_core = { version = "0.45.0", default_features = false, features = ["rustls"] }
 futures = "0.3.7"
 thiserror = "1.0.22"
 sha2 = "0.9.2"
-async-channel = "1.5.1"
 
 [dev-dependencies]
 chrono = "0.4.19"
