@@ -102,12 +102,12 @@ impl QLDBClient {
 
         match result {
             Ok(result) => {
-                transaction.commit().await?;
+                transaction.silent_commit().await?;
                 self.close_session(transaction.get_session()).await?;
                 Ok(result)
             }
             Err(error) => {
-                transaction.rollback().await?;
+                transaction.silent_rollback().await?;
                 self.close_session(transaction.get_session()).await?;
                 Err(error)
             }
