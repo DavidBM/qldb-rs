@@ -89,6 +89,15 @@ impl Transaction {
         Ok(())
     }
 
+    pub(crate) async fn silent_commit(&self) -> QLDBResult<()> {
+
+        match self.commit().await {
+            Ok(_) => Ok(()),
+            Err(QLDBError::TransactionAlreadyRollback) => Ok(()),
+            Err(error) => Err(error)
+        }
+    }
+
     /// Cancels the transaction. Once rollback is called the
     /// transaction becomes invalid. Subsequent calls to rollback or
     /// commit (internally) won't have any effect.
@@ -116,15 +125,20 @@ impl Transaction {
         Ok(())
     }
 
-    async fn complete(&self) -> bool {
-        let mut is_completed = self.completed.lock().await;
-
-        if *is_completed {
-            return true;
+    /// Cancels the transaction but it doesn't fails is the transaction
+    /// was already committed. This is useful for auto-closing scenarios
+    /// where you just want to rollback always when there is a drop or 
+    /// something similar. 
+    /// 
+    /// Once rollback is called the
+    /// transaction becomes invalid. Subsequent calls to rollback or
+    /// commit (internally) won't have any effect.
+    pub async fn silent_rollback(&self) -> QLDBResult<()> {
+        match self.rollback().await {
+            Ok(_) => Ok(()),
+            Err(QLDBError::TransactionAlreadyCommitted) => Ok(()),
+            Err(error) => Err(error)
         }
-
-        *is_completed = true;
-
     }
 
     pub(crate) async fn is_completed(&self) -> bool {
