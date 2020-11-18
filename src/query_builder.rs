@@ -7,10 +7,11 @@ use std::sync::Arc;
 
 /// Represents the query being built. It allows to add parameters
 /// and to execute the query.
+#[derive(Clone)]
 pub struct QueryBuilder {
     tx: Transaction,
     client: Arc<QldbSessionClient>,
-    statement: String,
+    statement: Arc<String>,
     params: Vec<IonValue>,
     auto_rollback: bool,
 }
@@ -25,7 +26,7 @@ impl QueryBuilder {
         QueryBuilder {
             client,
             tx,
-            statement: statement.to_string(),
+            statement: Arc::new(statement.to_string()),
             params: vec![],
             auto_rollback,
         }
