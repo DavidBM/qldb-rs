@@ -1,6 +1,6 @@
 [package]
 name = "qldb"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Couragium Solutions <info@couragium.com>"]
 edition = "2018"
 
@@ -16,7 +16,7 @@ repository = "https://github.com/Couragium/qldb-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ion-binary-rs = "0.6.0"
+ion-binary-rs = "0.7.0"
 rusoto_qldb_session = { version = "0.45.0", default_features = false, features = ["rustls", "serialize_structs", "deserialize_structs"] }
 rusoto_core = { version = "0.45.0", default_features = false, features = ["rustls"] }
 futures = "0.3.7"

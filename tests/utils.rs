@@ -44,6 +44,8 @@ pub async fn create_type_test<F: FnOnce(HashMap<String, IonValue>)>(
         .execute()
         .await?;
 
+    println!("{:?}", value);
+
     let values = match value.as_slice() {
         [IonValue::Struct(value)] => match value.get("data").unwrap() {
             IonValue::Struct(value) => value,

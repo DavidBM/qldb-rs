@@ -23,6 +23,10 @@ pub enum QLDBError {
     InternalChannelSendError,
     #[error("The statement provided to the count method didn't return what a normal SELECT COUNT(... would have returned.")]
     NonValidCountStatementResult,
+    #[error("The transaction is already commited, it cannot be rollback")]
+    TransactionAlreadyCommitted,
+    #[error("The transaction is already rollback, it cannot be committed")]
+    TransactionAlreadyRollback,
 }
 
 pub type QLDBResult<T> = Result<T, QLDBError>;

@@ -9,6 +9,13 @@ use rusoto_qldb_session::{
 use sha2::Sha256;
 use std::sync::Arc;
 
+#[derive(Debug)]
+enum TransactionStatus {
+    Open,
+    Rollback,
+    Commit,
+}
+
 /// Every query in QLDB is within a transaction. Ideally you will interact
 /// with this object via the method QLDBClient::transaction_within.
 #[derive(Clone)]
@@ -16,7 +23,7 @@ pub struct Transaction {
     client: Arc<QldbSessionClient>,
     pub(crate) transaction_id: Arc<String>,
     pub(crate) session: Arc<String>,
-    completed: Arc<Mutex<bool>>,
+    completed: Arc<Mutex<TransactionStatus>>,
     hasher: Arc<Mutex<IonHash>>,
     auto_rollback: bool,
 }
@@ -36,7 +43,7 @@ impl Transaction {
             client,
             transaction_id: Arc::new(transaction_id),
             session: Arc::new(session.into()),
-            completed: Arc::new(Mutex::new(false)),
+            completed: Arc::new(Mutex::new(TransactionStatus::Open)),
             hasher: Arc::new(Mutex::new(hasher)),
             auto_rollback,
         })
@@ -53,65 +60,96 @@ impl Transaction {
         )
     }
 
-    pub(crate) async fn commit(&self) -> QLDBResult<()> {
-        if self.complete().await {
-            return Ok(());
+    pub async fn commit(&self) -> QLDBResult<()> {
+        use TransactionStatus::*;
+
+        let mut is_completed = self.completed.lock().await;
+
+        match *is_completed {
+            Commit => return Ok(()),
+            Rollback => return Err(QLDBError::TransactionAlreadyRollback),
+            Open => {
+                let commit_digest = self.hasher.lock().await.get().to_owned();
+
+                self.client
+                    .send_command(create_commit_command(
+                        &self.session,
+                        &self.transaction_id,
+                        &commit_digest,
+                    ))
+                    .await?;
+            }
         }
 
-        let commit_digest = self.hasher.lock().await.get().to_owned();
-
-        let result = self
-            .client
-            .send_command(create_commit_command(
-                &self.session,
-                &self.transaction_id,
-                &commit_digest,
-            ))
-            .await;
-
-        result?;
+        *is_completed = Commit;
 
         // TODO: Check the returned CommitDigest with the
-        // current hash and failt if they are not equal.
+        // current hash and fail if they are not equal.
 
         Ok(())
+    }
+
+    pub(crate) async fn silent_commit(&self) -> QLDBResult<()> {
+
+        match self.commit().await {
+            Ok(_) => Ok(()),
+            Err(QLDBError::TransactionAlreadyRollback) => Ok(()),
+            Err(error) => Err(error)
+        }
     }
 
     /// Cancels the transaction. Once rollback is called the
     /// transaction becomes invalid. Subsequent calls to rollback or
     /// commit (internally) won't have any effect.
+    /// 
+    /// It fails is the transaction is already committed. For
+    /// a rollback that doesn't fail when already committed you can 
+    /// check the `silent_rollback` method.
     pub async fn rollback(&self) -> QLDBResult<()> {
-        if self.complete().await {
-            return Ok(());
+        use TransactionStatus::*;
+
+        let mut is_completed = self.completed.lock().await;
+
+        match *is_completed {
+            Rollback => return Ok(()),
+            Commit => return Err(QLDBError::TransactionAlreadyCommitted),
+            Open => {
+                self.client
+                    .send_command(create_rollback_command(&self.session))
+                    .await?;
+            }
         }
 
-        self.client
-            .send_command(create_rollback_command(&self.session))
-            .await?;
+        *is_completed = Rollback;
 
         Ok(())
     }
 
-    async fn complete(&self) -> bool {
-        let mut is_completed = self.completed.lock().await;
-
-        if *is_completed {
-            return true;
+    /// Cancels the transaction but it doesn't fails is the transaction
+    /// was already committed. This is useful for auto-closing scenarios
+    /// where you just want to rollback always when there is a drop or 
+    /// something similar. 
+    /// 
+    /// Once rollback is called the
+    /// transaction becomes invalid. Subsequent calls to rollback or
+    /// commit (internally) won't have any effect.
+    pub async fn silent_rollback(&self) -> QLDBResult<()> {
+        match self.rollback().await {
+            Ok(_) => Ok(()),
+            Err(QLDBError::TransactionAlreadyCommitted) => Ok(()),
+            Err(error) => Err(error)
         }
-
-        *is_completed = true;
-
-        false
     }
 
     pub(crate) async fn is_completed(&self) -> bool {
+        use TransactionStatus::*;
+
         let is_completed = self.completed.lock().await;
 
-        if *is_completed {
-            return true;
+        match *is_completed {
+            Commit | Rollback => true,
+            Open => false,
         }
-
-        false
     }
 
     pub(crate) async fn hash_query(&self, statement: &str, params: &[IonValue]) {
