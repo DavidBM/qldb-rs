@@ -50,6 +50,8 @@
 //! ```
 
 mod client;
+mod document;
+mod document_collection;
 mod query_builder;
 mod transaction;
 mod types;
@@ -58,4 +60,4 @@ pub use client::QLDBClient;
 pub use query_builder::QueryBuilder;
 pub use rusoto_core::Region;
 pub use transaction::Transaction;
-pub use types::{QLDBError, QLDBResult};
+pub use types::{QLDBError, QLDBExtractError, QLDBExtractResult, QLDBResult};

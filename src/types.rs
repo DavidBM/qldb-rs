@@ -30,3 +30,15 @@ pub enum QLDBError {
 }
 
 pub type QLDBResult<T> = Result<T, QLDBError>;
+
+#[derive(Debug, Error)]
+pub enum QLDBExtractError {
+    #[error("")]
+    MissingProperty,
+    #[error("")]
+    BadDataType,
+    #[error("")]
+    Overflow,
+}
+
+pub type QLDBExtractResult<T> = Result<T, QLDBExtractError>;

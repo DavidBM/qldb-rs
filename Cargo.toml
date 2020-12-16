@@ -17,6 +17,7 @@ repository = "https://github.com/Couragium/qldb-rs"
 
 [dependencies]
 ion-binary-rs = "0.7.0"
+num-traits = "0.2.14"
 rusoto_qldb_session = { version = "0.45.0", default_features = false, features = ["rustls", "serialize_structs", "deserialize_structs"] }
 rusoto_core = { version = "0.45.0", default_features = false, features = ["rustls"] }
 futures = "0.3.7"
