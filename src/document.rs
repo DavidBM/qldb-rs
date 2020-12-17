@@ -12,7 +12,7 @@ impl TryFrom<IonValue> for Document {
 
     fn try_from(value: IonValue) -> Result<Self, Self::Error> {
         match value {
-            IonValue::Struct(value) => Ok(value),
+            IonValue::Struct(value) => Ok(Document { info: value }),
             _ => Err(IonExtractionError::TypeNotSupported(value)),
         }
     }
@@ -26,9 +26,10 @@ impl Document {
         T: TryFrom<&'a IonValue> + Send + Sync + Clone,
         <T as TryFrom<&'a IonValue>>::Error: std::error::Error + Send + Sync + 'static,
     {
-        let element = self.info
+        let element = self
+            .info
             .get(name)
-            .ok_or_else(|| QLDBExtractError::MissingProperty(name.to_string()))?;
+            .ok_or_else(|| QLDBExtractError::MissingProperty)?;
 
         match T::try_from(element) {
             Ok(result) => Ok(result),
