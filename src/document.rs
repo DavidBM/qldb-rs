@@ -1,5 +1,5 @@
 use crate::types::{QLDBExtractError, QLDBExtractResult};
-use ion_binary_rs::{IonExtractionError, IonValue};
+use ion_binary_rs::IonValue;
 use std::{collections::HashMap, convert::TryFrom};
 
 #[derive(Clone)]
@@ -8,12 +8,12 @@ pub struct Document {
 }
 
 impl TryFrom<IonValue> for Document {
-    type Error = IonExtractionError;
+    type Error = QLDBExtractError;
 
     fn try_from(value: IonValue) -> Result<Self, Self::Error> {
         match value {
             IonValue::Struct(value) => Ok(Document { info: value }),
-            _ => Err(IonExtractionError::TypeNotSupported(value)),
+            _ => Err(QLDBExtractError::NotADocument(value)),
         }
     }
 }
@@ -29,7 +29,7 @@ impl Document {
         let element = self
             .info
             .get(name)
-            .ok_or_else(|| QLDBExtractError::MissingProperty)?;
+            .ok_or_else(|| QLDBExtractError::MissingProperty(name.to_string()))?;
 
         match T::try_from(element.clone()) {
             Ok(result) => Ok(result),

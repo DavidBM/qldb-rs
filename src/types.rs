@@ -33,11 +33,13 @@ pub type QLDBResult<T> = Result<T, QLDBError>;
 
 #[derive(Debug, Error)]
 pub enum QLDBExtractError {
-    #[error("")]
-    MissingProperty,
-    #[error("")]
+    #[error("Bad data type")]
     BadDataType(Box<dyn std::error::Error + Send + Sync + 'static>),
-    #[error("")]
+    #[error("Missing property {0}")]
+    MissingProperty(String),
+    #[error("Not a document")]
+    NotADocument(ion_binary_rs::IonValue),
+    #[error("Overflow")]
     Overflow,
 }
 

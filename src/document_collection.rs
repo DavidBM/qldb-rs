@@ -24,7 +24,7 @@ impl DocumentCollection {
         for document in &self.documents {
             let element = match document.info.get(name) {
                 Some(elem) => elem,
-                None => return Err(QLDBExtractError::MissingProperty),
+                None => return Err(QLDBExtractError::MissingProperty(name.to_string())),
             };
 
             let conversion_result = T::try_from(element.clone())
