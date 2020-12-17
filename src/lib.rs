@@ -57,6 +57,8 @@ mod transaction;
 mod types;
 
 pub use client::QLDBClient;
+pub use document::Document;
+pub use document_collection::DocumentCollection;
 pub use query_builder::QueryBuilder;
 pub use rusoto_core::Region;
 pub use transaction::Transaction;

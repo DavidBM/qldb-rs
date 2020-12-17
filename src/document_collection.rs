@@ -27,8 +27,8 @@ impl DocumentCollection {
                 None => return Err(QLDBExtractError::MissingProperty),
             };
 
-            let conversion_result =
-                T::try_from(element.clone()).map_err(|err| QLDBExtractError::BadDataType(Box::new(err)))?;
+            let conversion_result = T::try_from(element.clone())
+                .map_err(|err| QLDBExtractError::BadDataType(Box::new(err)))?;
 
             value = value
                 .checked_add(&conversion_result)
