@@ -70,9 +70,9 @@ impl QLDBClient {
 
     /// Starts a transaction and returns you the transaction handler. When
     /// using this method the transaction won't automatically commit or rollback
-    /// when finished. If they are left open they will be canceled when the 
+    /// when finished. If they are left open they will be canceled when the
     /// transaction times out on the DB side (30 seconds).
-    /// 
+    ///
     /// Use this method if you really need to use the transaction handler
     /// directly. If not, you may be better off using the method
     /// `transaction_within`.

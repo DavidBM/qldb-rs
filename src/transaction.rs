@@ -90,20 +90,19 @@ impl Transaction {
     }
 
     pub(crate) async fn silent_commit(&self) -> QLDBResult<()> {
-
         match self.commit().await {
             Ok(_) => Ok(()),
             Err(QLDBError::TransactionAlreadyRollback) => Ok(()),
-            Err(error) => Err(error)
+            Err(error) => Err(error),
         }
     }
 
     /// Cancels the transaction. Once rollback is called the
     /// transaction becomes invalid. Subsequent calls to rollback or
     /// commit (internally) won't have any effect.
-    /// 
+    ///
     /// It fails is the transaction is already committed. For
-    /// a rollback that doesn't fail when already committed you can 
+    /// a rollback that doesn't fail when already committed you can
     /// check the `silent_rollback` method.
     pub async fn rollback(&self) -> QLDBResult<()> {
         use TransactionStatus::*;
@@ -127,9 +126,9 @@ impl Transaction {
 
     /// Cancels the transaction but it doesn't fails is the transaction
     /// was already committed. This is useful for auto-closing scenarios
-    /// where you just want to rollback always when there is a drop or 
-    /// something similar. 
-    /// 
+    /// where you just want to rollback always when there is a drop or
+    /// something similar.
+    ///
     /// Once rollback is called the
     /// transaction becomes invalid. Subsequent calls to rollback or
     /// commit (internally) won't have any effect.
@@ -137,7 +136,7 @@ impl Transaction {
         match self.rollback().await {
             Ok(_) => Ok(()),
             Err(QLDBError::TransactionAlreadyCommitted) => Ok(()),
-            Err(error) => Err(error)
+            Err(error) => Err(error),
         }
     }
 

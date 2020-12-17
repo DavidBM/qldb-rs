@@ -1,6 +1,6 @@
 [package]
 name = "qldb"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Couragium Solutions <info@couragium.com>"]
 edition = "2018"
 
@@ -17,6 +17,7 @@ repository = "https://github.com/Couragium/qldb-rs"
 
 [dependencies]
 ion-binary-rs = "0.7.0"
+num-traits = "0.2.14"
 rusoto_qldb_session = { version = "0.45.0", default_features = false, features = ["rustls", "serialize_structs", "deserialize_structs"] }
 rusoto_core = { version = "0.45.0", default_features = false, features = ["rustls"] }
 futures = "0.3.7"
@@ -28,3 +29,6 @@ chrono = "0.4.19"
 async-std = { version = "1.7.0", features = ["attributes", "tokio02"] }
 eyre = "0.6.2"
 bigdecimal = "0.2.0"
+
+[features]
+documents_beta = []
