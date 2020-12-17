@@ -43,4 +43,10 @@ pub enum QLDBExtractError {
     Overflow,
 }
 
+impl PartialEq for QLDBExtractError {
+    fn eq(&self, other: &QLDBExtractError) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+    }
+}
+
 pub type QLDBExtractResult<T> = Result<T, QLDBExtractError>;

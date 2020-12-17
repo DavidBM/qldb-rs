@@ -11,6 +11,12 @@ pub struct DocumentCollection {
 }
 
 impl DocumentCollection {
+    pub fn new(documents: Vec<Document>) -> DocumentCollection {
+        DocumentCollection {
+            documents
+        }
+    }
+
     /// From a collection of documents, it will extract the given property from each and add them.
     /// It will fail in case of an overflow, so it is safer to use this function with BigUint/BigInt.
     /// In case of unsigned numeric types on return type, Overflow means the addition ended with a negative number.
