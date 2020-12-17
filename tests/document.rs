@@ -1,6 +1,7 @@
-use std::convert::{TryFrom, TryInto};
 use ion_binary_rs::IonValue;
+#[cfg(feature = "documents_beta")]
 use qldb::{Document, DocumentCollection, QLDBExtractError};
+use std::convert::{TryFrom, TryInto};
 
 fn get_qldb_struct() -> IonValue {
     IonValue::Struct(hashmap!(
@@ -13,13 +14,13 @@ fn get_qldb_struct() -> IonValue {
     ))
 }
 
+#[cfg(feature = "documents_beta")]
 #[test]
 fn check_document() {
-    
     let qldb_struct = get_qldb_struct();
-    
+
     let document = Document::try_from(qldb_struct).unwrap();
-    
+
     let value: String = document.extract_value("Model").unwrap();
     assert_eq!(value, "CLK 350");
 
@@ -34,14 +35,16 @@ fn check_document() {
     let new_value: String = document.extract_optional_value("Type").unwrap().unwrap();
     assert_eq!(new_value, "Sedan");
 
-    let is_none = document.extract_optional_value::<String>("Tipe").unwrap().is_none();
+    let is_none = document
+        .extract_optional_value::<String>("Tipe")
+        .unwrap()
+        .is_none();
     assert_eq!(is_none, true);
-
 }
 
+#[cfg(feature = "documents_beta")]
 #[test]
 fn check_document_collection() {
-
     let document: Document = get_qldb_struct().try_into().unwrap();
 
     let vector_docs = vec![document.clone(), document.clone(), document.clone()];
@@ -50,7 +53,7 @@ fn check_document_collection() {
 
     let value = doc_collection.extract_and_add("Year", 0).unwrap();
 
-    assert_eq!(value, 2019*3);
+    assert_eq!(value, 2019 * 3);
 }
 
 #[macro_export]

@@ -12,9 +12,7 @@ pub struct DocumentCollection {
 
 impl DocumentCollection {
     pub fn new(documents: Vec<Document>) -> DocumentCollection {
-        DocumentCollection {
-            documents
-        }
+        DocumentCollection { documents }
     }
 
     /// From a collection of documents, it will extract the given property from each and add them.

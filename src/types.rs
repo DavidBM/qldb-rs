@@ -31,6 +31,7 @@ pub enum QLDBError {
 
 pub type QLDBResult<T> = Result<T, QLDBError>;
 
+#[cfg(feature = "documents_beta")]
 #[derive(Debug, Error)]
 pub enum QLDBExtractError {
     #[error("Bad data type")]
@@ -43,10 +44,5 @@ pub enum QLDBExtractError {
     Overflow,
 }
 
-impl PartialEq for QLDBExtractError {
-    fn eq(&self, other: &QLDBExtractError) -> bool {
-        std::mem::discriminant(self) == std::mem::discriminant(other)
-    }
-}
-
+#[cfg(feature = "documents_beta")]
 pub type QLDBExtractResult<T> = Result<T, QLDBExtractError>;
