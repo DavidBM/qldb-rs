@@ -36,7 +36,7 @@ pub enum QLDBExtractError {
     #[error("")]
     MissingProperty,
     #[error("")]
-    BadDataType,
+    BadDataType(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("")]
     Overflow,
 }
