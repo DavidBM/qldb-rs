@@ -2,7 +2,7 @@ use crate::types::{QLDBExtractError, QLDBExtractResult};
 use ion_binary_rs::IonValue;
 use std::{collections::HashMap, convert::TryFrom};
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Document {
     pub info: HashMap<String, IonValue>,
 }
