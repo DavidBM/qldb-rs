@@ -13,7 +13,7 @@ pub struct DocumentCollection {
 impl TryFrom<Vec<IonValue>> for DocumentCollection {
     type Error = QLDBExtractError;
 
-    fn try_from(ion_values_vector: vec<IonValue>) -> Result<Self, Self::Error> {
+    fn try_from(ion_values_vector: Vec<IonValue>) -> Result<Self, Self::Error> {
         let mut documents_vector: Vec<Document> = Vec::new();
 
         for ion_value in ion_values_vector {
