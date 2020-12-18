@@ -5,7 +5,7 @@ use crate::{
 use ion_binary_rs::IonValue;
 use std::convert::TryFrom;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DocumentCollection {
     documents: Vec<Document>,
 }

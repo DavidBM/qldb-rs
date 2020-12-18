@@ -45,6 +45,12 @@ fn check_document() {
 #[cfg(feature = "documents_beta")]
 #[test]
 fn check_document_collection() {
+    let structure = get_qldb_struct();
+
+    let vector_structs = vec![structure.clone(), structure.clone(), structure.clone()];
+
+    let documents: DocumentCollection = vector_structs.try_into().unwrap();
+
     let document: Document = get_qldb_struct().try_into().unwrap();
 
     let vector_docs = vec![document.clone(), document.clone(), document.clone()];
@@ -53,6 +59,7 @@ fn check_document_collection() {
 
     let value = doc_collection.extract_and_add("Year", 0).unwrap();
 
+    assert_eq!(documents, doc_collection);
     assert_eq!(value, 2019 * 3);
 }
 
