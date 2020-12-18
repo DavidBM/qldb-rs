@@ -17,13 +17,8 @@ impl TryFrom<Vec<IonValue>> for DocumentCollection {
         let mut documents_vector: Vec<Document> = Vec::new();
 
         for ion_value in ion_values_vector {
-            let result = Document::try_from(ion_value);
-            match result {
-                Ok(document) => {
-                    documents_vector.push(document.clone());
-                }
-                _ => {}
-            }
+            let document = Document::try_from(ion_value)?;
+            documents_vector.push(document);
         }
 
         Ok(DocumentCollection::new(documents_vector))
