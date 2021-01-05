@@ -35,7 +35,6 @@ pub enum QLDBError {
 
 pub type QLDBResult<T> = Result<T, QLDBError>;
 
-#[cfg(feature = "documents_beta")]
 #[derive(Debug, Error)]
 pub enum QLDBExtractError {
     #[error("Bad data type")]
@@ -48,5 +47,4 @@ pub enum QLDBExtractError {
     Overflow,
 }
 
-#[cfg(feature = "documents_beta")]
 pub type QLDBExtractResult<T> = Result<T, QLDBExtractError>;
