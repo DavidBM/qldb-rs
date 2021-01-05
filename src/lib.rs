@@ -50,6 +50,7 @@
 //! ```
 
 mod client;
+mod cursor;
 mod query_builder;
 mod transaction;
 mod types;
@@ -72,3 +73,5 @@ pub use types::{QLDBError, QLDBResult};
 
 #[cfg(feature = "documents_beta")]
 pub use types::{QLDBExtractError, QLDBExtractResult};
+//#[cfg(feature = "documents_beta")]
+pub use cursor::Cursor;
