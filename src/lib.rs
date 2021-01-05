@@ -50,10 +50,10 @@
 //! ```
 
 mod client;
+mod cursor;
 mod query_builder;
 mod transaction;
 mod types;
-mod cursor;
 
 mod document;
 mod document_collection;
@@ -67,5 +67,5 @@ pub use rusoto_core::Region;
 pub use transaction::Transaction;
 pub use types::{QLDBError, QLDBResult};
 
-pub use types::{QLDBExtractError, QLDBExtractResult};
 pub use cursor::Cursor;
+pub use types::{QLDBExtractError, QLDBExtractResult};

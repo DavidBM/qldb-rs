@@ -50,12 +50,11 @@ impl QueryBuilder {
     /// Executes the query in QLDBwith the parameter provided by
     /// the `param` method. It will return a Vector of Ion Values,
     /// one for each document returned.
-    /// 
+    ///
     /// This method will automatically load all the pages. It may
-    /// require to make several HTTP calls to the QLDB Ledger as 
+    /// require to make several HTTP calls to the QLDB Ledger as
     /// each Page contains no more than 200 documents.
     pub async fn execute(&mut self) -> QLDBResult<Vec<IonValue>> {
-
         let result = self.clone().get_cursor()?.load_all().await?;
 
         if self.auto_rollback {
