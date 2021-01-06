@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 /// Represents the query being built. It allows to add parameters
 /// and to execute the query.
-#[derive(Clone)]
 pub struct QueryBuilder {
     tx: Transaction,
     client: Arc<QldbSessionClient>,
@@ -54,17 +53,22 @@ impl QueryBuilder {
     /// This method will automatically load all the pages. It may
     /// require to make several HTTP calls to the QLDB Ledger as
     /// each Page contains no more than 200 documents.
-    pub async fn execute(&mut self) -> QLDBResult<Vec<IonValue>> {
-        let result = self.clone().get_cursor()?.load_all().await?;
+    /// 
+    /// It consumes the QueryBuilder in the process.
+    pub async fn execute(self) -> QLDBResult<Vec<IonValue>> {
+        let auto_rollback = self.auto_rollback;
+        let tx = self.tx.clone();
 
-        if self.auto_rollback {
-            self.tx.rollback().await?;
+        let result = self.get_cursor()?.load_all().await?;
+
+        if auto_rollback {
+            tx.rollback().await?;
         }
 
         Ok(result)
     }
 
-    pub(crate) async fn get_next_page(
+    pub(crate) async fn execute_get_page(
         &mut self,
         page_token: &str,
     ) -> QLDBResult<(Vec<IonValue>, Option<String>)> {
@@ -158,7 +162,8 @@ impl QueryBuilder {
     /// If you want to make a simple count, it is better to use the count method
     /// from [Client::count](./struct.QLDBClient.html#method.count)
     ///
-    pub async fn count(&mut self) -> QLDBResult<i64> {
+    /// It consumes the QueryBuilder in the process.
+    pub async fn count(self) -> QLDBResult<i64> {
         let result = self.execute().await?;
 
         match result.last() {

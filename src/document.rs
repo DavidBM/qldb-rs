@@ -21,7 +21,7 @@ impl TryFrom<IonValue> for Document {
 impl Document {
     /// Extract a value from the document and tries to transform to the value of the return type.
     /// Fails if the property is not there.
-    pub fn extract_value<T>(&self, name: &str) -> QLDBExtractResult<T>
+    pub fn get_value<T>(&self, name: &str) -> QLDBExtractResult<T>
     where
         T: TryFrom<IonValue> + Send + Sync + Clone,
         <T as TryFrom<IonValue>>::Error: std::error::Error + Send + Sync + 'static,
@@ -37,8 +37,12 @@ impl Document {
         }
     }
 
+    pub fn get(&self, name: &str) -> Option<&IonValue> {
+        self.info.get(name)
+    }
+
     /// Same as `extract_value` but it returns None if the property is not there.
-    pub fn extract_optional_value<T>(&self, name: &str) -> QLDBExtractResult<Option<T>>
+    pub fn get_optional_value<T>(&self, name: &str) -> QLDBExtractResult<Option<T>>
     where
         T: TryFrom<IonValue> + Send + Sync + Clone,
         <T as TryFrom<IonValue>>::Error: std::error::Error + Send + Sync + 'static,
