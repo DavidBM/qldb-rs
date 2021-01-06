@@ -143,7 +143,7 @@ impl QueryBuilder {
         Ok((values, next_page_token))
     }
 
-    /// Created a cursor for this query, allowing to load values
+    /// Creates a cursor for this query, allowing to load values
     /// page by page. Each page in QLDB contains 200 documents.
     pub fn get_cursor(self) -> QLDBResult<Cursor> {
         if self.is_executed.load(Relaxed) {
