@@ -19,7 +19,7 @@ use std::{collections::HashMap, convert::TryFrom};
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Document {
-    pub info: HashMap<String, IonValue>,
+    document: HashMap<String, IonValue>,
 }
 
 impl TryFrom<IonValue> for Document {
@@ -27,7 +27,7 @@ impl TryFrom<IonValue> for Document {
 
     fn try_from(value: IonValue) -> Result<Self, Self::Error> {
         match value {
-            IonValue::Struct(value) => Ok(Document { info: value }),
+            IonValue::Struct(value) => Ok(Document { document: value }),
             _ => Err(QLDBExtractError::NotADocument(value)),
         }
     }
@@ -48,7 +48,7 @@ impl Document {
         <T as TryFrom<IonValue>>::Error: std::error::Error + Send + Sync + 'static,
     {
         let element = self
-            .info
+            .document
             .get(name)
             .ok_or_else(|| QLDBExtractError::MissingProperty(name.to_string()))?;
 
@@ -60,7 +60,7 @@ impl Document {
 
     /// Gets the raw IonValue 
     pub fn get(&self, name: &str) -> Option<&IonValue> {
-        self.info.get(name)
+        self.document.get(name)
     }
 
     /// Same as `extract_value` but it returns None if the property is not there.
@@ -69,7 +69,7 @@ impl Document {
         T: TryFrom<IonValue> + Send + Sync + Clone,
         <T as TryFrom<IonValue>>::Error: std::error::Error + Send + Sync + 'static,
     {
-        let element = match self.info.get(name) {
+        let element = match self.document.get(name) {
             Some(elem) => elem,
             None => return Ok(None),
         };
