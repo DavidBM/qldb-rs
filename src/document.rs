@@ -2,6 +2,21 @@ use crate::types::{QLDBExtractError, QLDBExtractResult};
 use ion_binary_rs::IonValue;
 use std::{collections::HashMap, convert::TryFrom};
 
+/// It contains the IonValue representing the QLDB Document.
+/// 
+/// It contains methods that will extract and try to transfor
+/// the IonValue to your type.
+/// 
+/// ```rust,no_run
+/// use qldb::{QLDBExtractResult, Document};
+/// 
+/// fn test(document: Document) -> QLDBExtractResult<u64> {
+/// 
+///     let points: u64 = document.get_value("points")?;
+/// 
+///     Ok(points)
+/// }
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Document {
     pub info: HashMap<String, IonValue>,
@@ -19,6 +34,12 @@ impl TryFrom<IonValue> for Document {
 }
 
 impl Document {
+    pub fn test(document: Document) -> QLDBExtractResult<u64> {
+        let points: u64 = document.get_value("points")?;
+
+        Ok(points)
+    }
+
     /// Extract a value from the document and tries to transform to the value of the return type.
     /// Fails if the property is not there.
     pub fn get_value<T>(&self, name: &str) -> QLDBExtractResult<T>
@@ -37,6 +58,7 @@ impl Document {
         }
     }
 
+    /// Gets the raw IonValue 
     pub fn get(&self, name: &str) -> Option<&IonValue> {
         self.info.get(name)
     }
