@@ -1,10 +1,10 @@
 mod utils;
 
-use rand::Rng;
-use rand::thread_rng;
-use rand::distributions::Alphanumeric;
 use ion_binary_rs::IonValue;
 use qldb::QLDBClient;
+use rand::distributions::Alphanumeric;
+use rand::thread_rng;
+use rand::Rng;
 use utils::ensure_test_table;
 
 #[async_std::test]
@@ -16,7 +16,6 @@ async fn cursor_800_documents() {
     let documents_model = format!("cursor_800_documents{}", rand_string());
 
     for _ in 0..20 {
-
         let table = test_table.clone();
         let model = documents_model.clone();
 
@@ -32,7 +31,6 @@ async fn cursor_800_documents() {
 
             Ok(())
         }).await.unwrap();
-
     }
 
     let table = test_table.clone();
@@ -81,8 +79,6 @@ async fn cursor_800_documents() {
         })
         .await
         .unwrap();
-
-
 }
 
 fn get_qldb_struct(name: &str) -> IonValue {
@@ -111,8 +107,8 @@ macro_rules! hashmap(
 
 fn rand_string() -> String {
     thread_rng()
-    .sample_iter(&Alphanumeric)
-    .take(30)
-    .map(char::from)
-    .collect()
+        .sample_iter(&Alphanumeric)
+        .take(30)
+        .map(char::from)
+        .collect()
 }

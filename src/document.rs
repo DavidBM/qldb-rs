@@ -3,17 +3,17 @@ use ion_binary_rs::IonValue;
 use std::{collections::HashMap, convert::TryFrom};
 
 /// It contains the IonValue representing the QLDB Document.
-/// 
+///
 /// It contains methods that will extract and try to transfor
 /// the IonValue to your type.
-/// 
+///
 /// ```rust,no_run
 /// use qldb::{QLDBExtractResult, Document};
-/// 
+///
 /// fn test(document: Document) -> QLDBExtractResult<u64> {
-/// 
+///
 ///     let points: u64 = document.get_value("points")?;
-/// 
+///
 ///     Ok(points)
 /// }
 /// ```
@@ -58,7 +58,7 @@ impl Document {
         }
     }
 
-    /// Gets the raw IonValue 
+    /// Gets the raw IonValue
     pub fn get(&self, name: &str) -> Option<&IonValue> {
         self.document.get(name)
     }

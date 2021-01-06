@@ -53,7 +53,7 @@ impl QueryBuilder {
     /// This method will automatically load all the pages. It may
     /// require to make several HTTP calls to the QLDB Ledger as
     /// each Page contains no more than 200 documents.
-    /// 
+    ///
     /// It consumes the QueryBuilder in the process.
     pub async fn execute(self) -> QLDBResult<Vec<IonValue>> {
         let auto_rollback = self.auto_rollback;

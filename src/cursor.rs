@@ -3,9 +3,9 @@ use ion_binary_rs::IonValue;
 
 /// Cursor allows to get all values from a statement page by page.
 ///
-/// QLDB returns 200 documents for each page. 
-/// 
-/// You don't need to directly use Cursor in your code. When the 
+/// QLDB returns 200 documents for each page.
+///
+/// You don't need to directly use Cursor in your code. When the
 /// method [](crate::QueryBuilder::execute) uses Cursor internally
 /// in order to load all values.
 ///
@@ -38,7 +38,7 @@ use ion_binary_rs::IonValue;
 /// # Ok(())
 /// # }
 /// ```
-/// 
+///
 #[derive(Debug)]
 pub struct Cursor {
     query_builder: QueryBuilder,
@@ -58,15 +58,15 @@ impl Cursor {
     /// It loads the next page from a query. It automatically tracks
     /// the next_page_token, so you can call this method again and
     /// again in order to load all pages.
-    /// 
+    ///
     /// It returns Ok(Some(_)) when QLDB returns documents.
-    /// 
-    /// It returns Ok(None) when QLDB doesn't return documents, 
+    ///
+    /// It returns Ok(None) when QLDB doesn't return documents,
     /// which means that there isn't more pages to query
-    /// 
+    ///
     /// ```rust,no_run
     /// # use qldb::{Cursor, QLDBResult};
-    /// 
+    ///
     /// # async fn test(mut cursor: Cursor) ->  QLDBResult<()> {
     ///     while let Some(mut values) = cursor.load_more().await? {
     ///         println!("{:?}", values);
@@ -74,7 +74,7 @@ impl Cursor {
     ///     
     /// #   Ok(())
     /// # }
-    /// 
+    ///
     /// ```
     pub async fn load_more(&mut self) -> QLDBResult<Option<Vec<IonValue>>> {
         let (values, next_page_token) = if self.is_first_page {
