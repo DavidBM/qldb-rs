@@ -100,7 +100,7 @@ impl Cursor {
         while let Some(mut values) = self.load_more().await? {
             result.append(&mut values);
 
-            if let None = self.next_page {
+            if self.next_page.is_none() {
                 break;
             }
         }
