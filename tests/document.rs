@@ -54,7 +54,14 @@ fn check_document_collection() {
 
     let doc_collection = DocumentCollection::new(vector_docs);
 
-    let value = doc_collection.extract_and_add("Year", 0).unwrap();
+    let value = doc_collection
+        .clone()
+        .into_iter()
+        .map(|doc| doc.get_value::<u64>("Year"))
+        .collect::<Result<Vec<u64>, _>>()
+        .unwrap()
+        .into_iter()
+        .fold(0, |acc, val| acc + val);
 
     assert_eq!(documents, doc_collection);
     assert_eq!(value, 2019 * 3);
