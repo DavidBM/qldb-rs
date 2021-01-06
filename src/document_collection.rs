@@ -21,6 +21,8 @@ use std::ops::Index;
 /// 
 /// ```rust,no_run
 /// 
+/// use qldb::{DocumentCollection, QLDBExtractResult};
+/// 
 /// // Adds all the "points" attributes from each document.
 /// // It stops early in case of error extracting the attribute.
 /// fn count_points(matches: DocumentCollection) -> QLDBExtractResult<u64> {

@@ -62,7 +62,7 @@ pub async fn create_type_test<F: FnOnce(HashMap<String, IonValue>)>(
 }
 
 pub async fn ensure_test_table(client: &QLDBClient) -> String {
-    let _ = client
+    let result = client
         .transaction_within(|client| async move {
             let _ = client
                 .query("CREATE TABLE QldbLibRsTest;")
@@ -73,6 +73,8 @@ pub async fn ensure_test_table(client: &QLDBClient) -> String {
         })
         // If the table already exist we ignore the error
         .await;
+
+    println!("Table created: {:?}", result);
 
     "QldbLibRsTest".to_string()
 }

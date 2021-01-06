@@ -41,7 +41,7 @@ impl QueryBuilder {
     /// `SELECT * FROM Autos WHERE id = ? AND model = ?`
     /// will need 2 calls to this method. The first will refer to
     /// the first `?` and the second to the second `?`.
-    pub fn param<P: Into<IonValue> + Clone>(&mut self, param: P) -> &mut Self {
+    pub fn param<P: Into<IonValue> + Clone>(mut self, param: P) -> Self {
         self.params.push(param.into());
         self
     }

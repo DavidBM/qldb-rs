@@ -11,6 +11,7 @@ use ion_binary_rs::IonValue;
 ///
 /// ```rust,no_run
 /// use qldb::{QLDBClient, Cursor};
+/// # use std::collections::HashMap;
 /// # use eyre::Result;
 ///
 /// # async fn test() -> Result<()> {
@@ -23,12 +24,12 @@ use ion_binary_rs::IonValue;
 ///
 /// client
 ///     .transaction_within(|client| async move {   
-///         let cursor = client
+///         let mut cursor = client
 ///             .query("SEL/CT * FROM TestTable")
 ///             .get_cursor()?;
 ///             
 ///             while let Some(mut values) = cursor.load_more().await? {
-///                 println/("{:?}", values);
+///                 println!("{:?}", values);
 ///             }
 ///
 ///         Ok(())
@@ -42,7 +43,7 @@ use ion_binary_rs::IonValue;
 pub struct Cursor {
     query_builder: QueryBuilder,
     next_page: Option<String>,
-    page: u64,
+    is_first_page: bool,
 }
 
 impl Cursor {
@@ -50,7 +51,7 @@ impl Cursor {
         Cursor {
             query_builder,
             next_page: None,
-            page: 0,
+            is_first_page: true,
         }
     }
 
@@ -64,10 +65,11 @@ impl Cursor {
     /// which means that there isn't more pages to query
     /// 
     /// ```rust,no_run
+    /// # use qldb::{Cursor, QLDBResult};
     /// 
-    /// # async fn test(cursor: Cursor) ->  QLDBResult<()> {
+    /// # async fn test(mut cursor: Cursor) ->  QLDBResult<()> {
     ///     while let Some(mut values) = cursor.load_more().await? {
-    ///         println/("{:?}", values);
+    ///         println!("{:?}", values);
     ///     }
     ///     
     /// #   Ok(())
@@ -75,13 +77,16 @@ impl Cursor {
     /// 
     /// ```
     pub async fn load_more(&mut self) -> QLDBResult<Option<Vec<IonValue>>> {
-        let (values, next_page_token) = if self.page == 0 {
+        let (values, next_page_token) = if self.is_first_page {
             self.query_builder.execute_statement().await?
         } else if let Some(page) = &self.next_page {
             self.query_builder.execute_get_page(&page).await?
         } else {
+            self.is_first_page = false;
             return Ok(None);
         };
+
+        self.is_first_page = false;
 
         self.next_page = next_page_token;
 
@@ -94,6 +99,10 @@ impl Cursor {
 
         while let Some(mut values) = self.load_more().await? {
             result.append(&mut values);
+
+            if let None = self.next_page {
+                break;
+            }
         }
 
         Ok(result)
