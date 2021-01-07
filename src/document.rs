@@ -34,12 +34,6 @@ impl TryFrom<IonValue> for Document {
 }
 
 impl Document {
-    pub fn test(document: Document) -> QLDBExtractResult<u64> {
-        let points: u64 = document.get_value("points")?;
-
-        Ok(points)
-    }
-
     /// Extract a value from the document and tries to transform to the value of the return type.
     /// Fails if the property is not there.
     pub fn get_value<T>(&self, name: &str) -> QLDBExtractResult<T>
