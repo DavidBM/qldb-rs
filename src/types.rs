@@ -31,20 +31,20 @@ pub enum QLDBError {
         "The query was already executed. Trying to get a Cursor or executing it again will fail."
     )]
     QueryAlreadyExecuted,
+    #[error("Error extranting the QLDB returned Ion values to the requested type.")]
+    QLDBExtractError(#[from] QLDBExtractError)
 }
 
 pub type QLDBResult<T> = Result<T, QLDBError>;
 
 #[derive(Debug, Error)]
 pub enum QLDBExtractError {
-    #[error("Bad data type")]
+    #[error("Cannot convert the IonValue to the requested type.")]
     BadDataType(Box<dyn std::error::Error + Send + Sync + 'static>),
-    #[error("Missing property {0}")]
+    #[error("Missing property in the QLDB Document {0}")]
     MissingProperty(String),
-    #[error("Not a document")]
+    #[error("Not a document. QLDB Documents must be an Ion::Struct, this is a: {0:?}")]
     NotADocument(ion_binary_rs::IonValue),
-    #[error("Overflow")]
-    Overflow,
 }
 
 pub type QLDBExtractResult<T> = Result<T, QLDBExtractError>;

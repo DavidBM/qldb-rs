@@ -61,6 +61,10 @@ impl DocumentCollection {
     pub fn new(documents: Vec<Document>) -> DocumentCollection {
         DocumentCollection { documents }
     }
+
+    pub fn last(&self) -> Option<&Document> {
+        self.documents.last()
+    }
 }
 
 impl IntoIterator for DocumentCollection {
@@ -77,5 +81,15 @@ impl Index<usize> for DocumentCollection {
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.documents[index]
+    }
+}
+
+impl Extend<Document> for DocumentCollection {
+
+    fn extend<T: IntoIterator<Item=Document>>(&mut self, iter: T) {
+
+        for doc in iter {
+            self.documents.push(doc);
+        }
     }
 }

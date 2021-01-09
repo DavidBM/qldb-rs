@@ -1,5 +1,6 @@
+use crate::DocumentCollection;
 use crate::{QLDBResult, QueryBuilder};
-use ion_binary_rs::IonValue;
+use std::convert::TryInto;
 
 /// Cursor allows to get all values from a statement page by page.
 ///
@@ -76,7 +77,7 @@ impl Cursor {
     /// # }
     ///
     /// ```
-    pub async fn load_more(&mut self) -> QLDBResult<Option<Vec<IonValue>>> {
+    pub async fn load_more(&mut self) -> QLDBResult<Option<DocumentCollection>> {
         let (values, next_page_token) = if self.is_first_page {
             self.query_builder.execute_statement().await?
         } else if let Some(page) = &self.next_page {
@@ -90,15 +91,15 @@ impl Cursor {
 
         self.next_page = next_page_token;
 
-        Ok(Some(values))
+        Ok(Some(values.try_into()?))
     }
 
     /// Loads all pages from the cursor and consumes it in the process.
-    pub async fn load_all(mut self) -> QLDBResult<Vec<IonValue>> {
-        let mut result = vec![];
+    pub async fn load_all(mut self) -> QLDBResult<DocumentCollection> {
+        let mut result = DocumentCollection::new(vec![]);
 
-        while let Some(mut values) = self.load_more().await? {
-            result.append(&mut values);
+        while let Some(values) = self.load_more().await? {
+            result.extend(values.into_iter());
 
             if self.next_page.is_none() {
                 break;

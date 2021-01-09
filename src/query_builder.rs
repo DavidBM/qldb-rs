@@ -1,4 +1,4 @@
-use crate::{Cursor, QLDBError, QLDBResult, Transaction};
+use crate::{DocumentCollection, Cursor, QLDBError, QLDBResult, Transaction};
 use ion_binary_rs::{IonEncoder, IonParser, IonValue};
 use rusoto_qldb_session::{
     ExecuteStatementRequest, FetchPageRequest, QldbSession, QldbSessionClient, SendCommandRequest,
@@ -55,7 +55,7 @@ impl QueryBuilder {
     /// each Page contains no more than 200 documents.
     ///
     /// It consumes the QueryBuilder in the process.
-    pub async fn execute(self) -> QLDBResult<Vec<IonValue>> {
+    pub async fn execute(self) -> QLDBResult<DocumentCollection> {
         let auto_rollback = self.auto_rollback;
         let tx = self.tx.clone();
 
@@ -167,7 +167,7 @@ impl QueryBuilder {
         let result = self.execute().await?;
 
         match result.last() {
-            Some(IonValue::Struct(data)) => match data.get("_1") {
+            Some(ref doc) => match doc.get("_1") {
                 Some(IonValue::Integer(count)) => Ok(*count),
                 _ => Err(QLDBError::NonValidCountStatementResult),
             },
