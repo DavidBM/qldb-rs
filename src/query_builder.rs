@@ -1,4 +1,4 @@
-use crate::{DocumentCollection, Cursor, QLDBError, QLDBResult, Transaction};
+use crate::{Cursor, DocumentCollection, QLDBError, QLDBResult, Transaction};
 use ion_binary_rs::{IonEncoder, IonParser, IonValue};
 use rusoto_qldb_session::{
     ExecuteStatementRequest, FetchPageRequest, QldbSession, QldbSessionClient, SendCommandRequest,

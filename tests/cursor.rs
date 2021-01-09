@@ -1,7 +1,7 @@
 mod utils;
 
-use qldb::DocumentCollection;
 use ion_binary_rs::IonValue;
+use qldb::DocumentCollection;
 use qldb::QLDBClient;
 use rand::distributions::Alphanumeric;
 use rand::thread_rng;

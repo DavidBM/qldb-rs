@@ -32,7 +32,7 @@ pub enum QLDBError {
     )]
     QueryAlreadyExecuted,
     #[error("Error extranting the QLDB returned Ion values to the requested type.")]
-    QLDBExtractError(#[from] QLDBExtractError)
+    QLDBExtractError(#[from] QLDBExtractError),
 }
 
 pub type QLDBResult<T> = Result<T, QLDBError>;

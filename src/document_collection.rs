@@ -105,9 +105,7 @@ impl Index<usize> for DocumentCollection {
 }
 
 impl Extend<Document> for DocumentCollection {
-
-    fn extend<T: IntoIterator<Item=Document>>(&mut self, iter: T) {
-
+    fn extend<T: IntoIterator<Item = Document>>(&mut self, iter: T) {
         for doc in iter {
             self.documents.push(doc);
         }
@@ -115,7 +113,6 @@ impl Extend<Document> for DocumentCollection {
 }
 
 impl AsRef<Vec<Document>> for DocumentCollection {
-
     fn as_ref(&self) -> &Vec<Document> {
         &self.documents
     }
