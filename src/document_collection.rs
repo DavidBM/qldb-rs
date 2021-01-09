@@ -62,8 +62,28 @@ impl DocumentCollection {
         DocumentCollection { documents }
     }
 
-    pub fn last(&self) -> Option<&Document> {
-        self.documents.last()
+    pub fn into_inner(self) -> Vec<Document> {
+        self.documents
+    }
+
+    pub fn to_vec(self) -> Vec<Document> {
+        self.into_inner()
+    }
+
+    pub fn len(self) -> usize {
+        self.documents.len()
+    }
+}
+
+impl Default for DocumentCollection {
+    fn default() -> Self {
+        DocumentCollection::new(vec![])
+    }
+}
+
+impl From<DocumentCollection> for Vec<Document> {
+    fn from(docs: DocumentCollection) -> Self {
+        docs.to_vec()
     }
 }
 
@@ -91,5 +111,12 @@ impl Extend<Document> for DocumentCollection {
         for doc in iter {
             self.documents.push(doc);
         }
+    }
+}
+
+impl AsRef<Vec<Document>> for DocumentCollection {
+
+    fn as_ref(&self) -> &Vec<Document> {
+        &self.documents
     }
 }

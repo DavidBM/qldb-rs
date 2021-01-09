@@ -28,11 +28,8 @@ async fn qldb_transaction() -> Result<()> {
 
             let count = result?;
 
-            let first_count = match &count[0] {
-                IonValue::Struct(data) => match data.get("_1") {
-                    Some(IonValue::Integer(count)) => count,
-                    _ => panic!("First count returned a non integer"),
-                },
+            let first_count = match &count[0].get("_1") {
+                Some(IonValue::Integer(count)) => count,
                 _ => panic!("First count returned a non integer"),
             };
 
@@ -49,11 +46,8 @@ async fn qldb_transaction() -> Result<()> {
                 .execute()
                 .await?;
 
-            match &count[0] {
-                IonValue::Struct(data) => match data.get("_1") {
-                    Some(IonValue::Integer(count)) => assert_eq!(*count, first_count + 1),
-                    _ => panic!("Second count returned a non integer"),
-                },
+            match &count[0].get("_1") {
+                Some(IonValue::Integer(count)) => assert_eq!(*count, first_count + 1),
                 _ => panic!("Second count returned a non integer"),
             };
 
@@ -81,11 +75,8 @@ async fn qldb_transaction_rollback() -> Result<()> {
 
                 let count = result?;
 
-                let count = match &count[0] {
-                    IonValue::Struct(data) => match data.get("_1") {
-                        Some(IonValue::Integer(count)) => count,
-                        _ => panic!("First count returned a non integer"),
-                    },
+                let count = match &count[0].get("_1") {
+                    Some(IonValue::Integer(count)) => count,
                     _ => panic!("First count returned a non integer"),
                 };
 
@@ -118,11 +109,8 @@ async fn qldb_transaction_rollback() -> Result<()> {
                     .execute()
                     .await?;
 
-                let count = match &count[0] {
-                    IonValue::Struct(data) => match data.get("_1") {
-                        Some(IonValue::Integer(count)) => count,
-                        _ => panic!("Second count returned a non integer"),
-                    },
+                let count = match &count[0].get("_1") {
+                    Some(IonValue::Integer(count)) => count,
                     _ => panic!("Second count returned a non integer"),
                 };
 

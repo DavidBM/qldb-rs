@@ -1,5 +1,6 @@
 mod utils;
 
+use qldb::DocumentCollection;
 use ion_binary_rs::IonValue;
 use qldb::QLDBClient;
 use rand::distributions::Alphanumeric;
@@ -46,11 +47,11 @@ async fn cursor_800_documents() {
 
             let mut counter: u64 = 0;
 
-            let mut result: Vec<IonValue> = vec![];
+            let mut result: DocumentCollection = Default::default();
 
-            while let Some(mut values) = cursor.load_more().await.unwrap() {
+            while let Some(values) = cursor.load_more().await.unwrap() {
                 counter += 1;
-                result.append(&mut values);
+                result.extend(values.into_iter());
             }
 
             assert!(counter > 1);

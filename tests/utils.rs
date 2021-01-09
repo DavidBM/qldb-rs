@@ -29,10 +29,7 @@ pub async fn create_type_test<F: FnOnce(HashMap<String, IonValue>)>(
 
     println!("{:?}", value);
 
-    let document_id = match value.as_slice() {
-        [IonValue::Struct(value)] => value.get("documentId").unwrap().clone(),
-        _ => panic!("Insert didn't return a document id"),
-    };
+    let document_id = value[0].get("documentId").unwrap();
 
     let value = client
         .read_query(&format!(
@@ -46,12 +43,9 @@ pub async fn create_type_test<F: FnOnce(HashMap<String, IonValue>)>(
 
     println!("{:?}", value);
 
-    let values = match value.as_slice() {
-        [IonValue::Struct(value)] => match value.get("data").unwrap() {
-            IonValue::Struct(value) => value,
-            _ => panic!("Select didn't return data"),
-        },
-        _ => panic!("Select didn't return an struct"),
+    let values = match value[0].get("data") {
+        Some(IonValue::Struct(value)) => value,
+        _ => panic!("Select didn't return data"),
     };
 
     println!("{:?}", values);
