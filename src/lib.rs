@@ -51,21 +51,18 @@
 
 mod client;
 mod cursor;
+mod document;
+mod document_collection;
 mod query_builder;
 mod transaction;
 mod types;
 
-mod document;
-mod document_collection;
-
+pub use client::QLDBClient;
+pub use cursor::Cursor;
 pub use document::Document;
 pub use document_collection::DocumentCollection;
-
-pub use client::QLDBClient;
 pub use query_builder::QueryBuilder;
 pub use rusoto_core::Region;
 pub use transaction::Transaction;
 pub use types::{QLDBError, QLDBResult};
-
-pub use cursor::Cursor;
 pub use types::{QLDBExtractError, QLDBExtractResult};
