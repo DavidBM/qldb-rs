@@ -54,6 +54,7 @@ mod cursor;
 mod document;
 mod document_collection;
 mod query_builder;
+mod session_pool;
 mod transaction;
 mod types;
 
