@@ -7,6 +7,7 @@ use rusoto_qldb_session::{
     SendCommandRequest, StartTransactionRequest,
 };
 use sha2::Sha256;
+use std::fmt::Debug;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -186,6 +187,16 @@ impl Transaction {
 
     pub(crate) fn get_session(&self) -> &str {
         &self.session
+    }
+}
+
+impl Debug for Transaction {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Transaction")
+            .field("transaction_id", &self.transaction_id)
+            .field("session", &self.session)
+            .finish()
     }
 }
 

@@ -1,10 +1,42 @@
-use crate::{
-    document::Document,
-    types::{QLDBExtractError, QLDBExtractResult},
-};
+use crate::{document::Document, types::QLDBExtractError};
 use ion_binary_rs::IonValue;
 use std::convert::TryFrom;
+use std::ops::Index;
 
+/// Represents a collection of documents. It implements
+/// [](std::iter::IntoIterator) so you can call
+/// [](std::iter::IntoIterator::into_iter) in order to
+/// use it in for loops or with [](std::iter::Iterator::map).
+///
+/// It implements [](std::ops::Index) too.
+///
+/// It adds some utilities methods in order to do common
+/// operations.
+///
+/// You can use the into_iter in order to execute aggregate
+/// values or to make other complex operation.
+///
+/// ```rust,no_run
+///
+/// use qldb::{DocumentCollection, QLDBExtractResult};
+///
+/// // Adds all the "points" attributes from each document.
+/// // It stops early in case of error extracting the attribute.
+/// fn count_points(matches: DocumentCollection) -> QLDBExtractResult<u64> {
+///
+///     // You can use other types as BigUInt, BigDecimal, etc
+///     // in order to avoid overflow
+///
+///     let result: u64 = matches
+///         .into_iter()
+///         .map(|doc| doc.get_value::<u64>("points"))
+///         .collect::<Result<Vec<u64>, _>>()?
+///         .into_iter()
+///         .fold(0, |acc, val| acc + val);
+///
+///     Ok(result)
+/// }
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct DocumentCollection {
     documents: Vec<Document>,
@@ -30,30 +62,58 @@ impl DocumentCollection {
         DocumentCollection { documents }
     }
 
-    /// From a collection of documents, it will extract the given property from each and add them.
-    /// It will fail in case of an overflow, so it is safer to use this function with BigUint/BigInt.
-    /// In case of unsigned numeric types on return type, Overflow means the addition ended with a negative number.
-    pub fn extract_and_add<T>(&self, name: &str, initial_value: T) -> QLDBExtractResult<T>
-    where
-        T: TryFrom<IonValue> + Send + Sync + Clone + Default + num_traits::CheckedAdd,
-        <T as TryFrom<IonValue>>::Error: std::error::Error + Send + Sync + 'static,
-    {
-        let mut value = initial_value;
+    pub fn into_inner(self) -> Vec<Document> {
+        self.documents
+    }
 
-        for document in &self.documents {
-            let element = match document.info.get(name) {
-                Some(elem) => elem,
-                None => return Err(QLDBExtractError::MissingProperty(name.to_string())),
-            };
+    pub fn to_vec(self) -> Vec<Document> {
+        self.into_inner()
+    }
 
-            let conversion_result = T::try_from(element.clone())
-                .map_err(|err| QLDBExtractError::BadDataType(Box::new(err)))?;
+    pub fn len(self) -> usize {
+        self.documents.len()
+    }
+}
 
-            value = value
-                .checked_add(&conversion_result)
-                .ok_or(QLDBExtractError::Overflow)?;
+impl Default for DocumentCollection {
+    fn default() -> Self {
+        DocumentCollection::new(vec![])
+    }
+}
+
+impl From<DocumentCollection> for Vec<Document> {
+    fn from(docs: DocumentCollection) -> Self {
+        docs.to_vec()
+    }
+}
+
+impl IntoIterator for DocumentCollection {
+    type Item = Document;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.documents.into_iter()
+    }
+}
+
+impl Index<usize> for DocumentCollection {
+    type Output = Document;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.documents[index]
+    }
+}
+
+impl Extend<Document> for DocumentCollection {
+    fn extend<T: IntoIterator<Item = Document>>(&mut self, iter: T) {
+        for doc in iter {
+            self.documents.push(doc);
         }
+    }
+}
 
-        Ok(value)
+impl AsRef<Vec<Document>> for DocumentCollection {
+    fn as_ref(&self) -> &Vec<Document> {
+        &self.documents
     }
 }

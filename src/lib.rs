@@ -50,25 +50,19 @@
 //! ```
 
 mod client;
+mod cursor;
+mod document;
+mod document_collection;
 mod query_builder;
 mod transaction;
 mod types;
 
-#[cfg(feature = "documents_beta")]
-mod document;
-#[cfg(feature = "documents_beta")]
-mod document_collection;
-
-#[cfg(feature = "documents_beta")]
-pub use document::Document;
-#[cfg(feature = "documents_beta")]
-pub use document_collection::DocumentCollection;
-
 pub use client::QLDBClient;
+pub use cursor::Cursor;
+pub use document::Document;
+pub use document_collection::DocumentCollection;
 pub use query_builder::QueryBuilder;
 pub use rusoto_core::Region;
 pub use transaction::Transaction;
 pub use types::{QLDBError, QLDBResult};
-
-#[cfg(feature = "documents_beta")]
 pub use types::{QLDBExtractError, QLDBExtractResult};

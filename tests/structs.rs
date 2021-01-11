@@ -16,6 +16,7 @@ async fn qldb_type_big_struct() -> Result<()> {
     })
     .await
 }
+
 fn build_big_struct() -> IonValue {
     let list = IonValue::List(vec![
         IonValue::Integer(1),

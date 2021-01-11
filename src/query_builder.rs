@@ -1,19 +1,22 @@
-use crate::{QLDBError, QLDBResult, Transaction};
+use crate::{Cursor, DocumentCollection, QLDBError, QLDBResult, Transaction};
 use ion_binary_rs::{IonEncoder, IonParser, IonValue};
 use rusoto_qldb_session::{
-    ExecuteStatementRequest, QldbSession, QldbSessionClient, SendCommandRequest, ValueHolder,
+    ExecuteStatementRequest, FetchPageRequest, QldbSession, QldbSessionClient, SendCommandRequest,
+    ValueHolder,
 };
+use std::fmt::Debug;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Arc;
 
 /// Represents the query being built. It allows to add parameters
 /// and to execute the query.
-#[derive(Clone)]
 pub struct QueryBuilder {
     tx: Transaction,
     client: Arc<QldbSessionClient>,
     statement: Arc<String>,
     params: Vec<IonValue>,
     auto_rollback: bool,
+    is_executed: Arc<AtomicBool>,
 }
 
 impl QueryBuilder {
@@ -29,6 +32,7 @@ impl QueryBuilder {
             statement: Arc::new(statement.to_string()),
             params: vec![],
             auto_rollback,
+            is_executed: Arc::new(AtomicBool::from(false)),
         }
     }
 
@@ -37,7 +41,7 @@ impl QueryBuilder {
     /// `SELECT * FROM Autos WHERE id = ? AND model = ?`
     /// will need 2 calls to this method. The first will refer to
     /// the first `?` and the second to the second `?`.
-    pub fn param<P: Into<IonValue> + Clone>(&mut self, param: P) -> &mut Self {
+    pub fn param<P: Into<IonValue> + Clone>(mut self, param: P) -> Self {
         self.params.push(param.into());
         self
     }
@@ -45,9 +49,63 @@ impl QueryBuilder {
     /// Executes the query in QLDBwith the parameter provided by
     /// the `param` method. It will return a Vector of Ion Values,
     /// one for each document returned.
-    pub async fn execute(&mut self) -> QLDBResult<Vec<IonValue>> {
+    ///
+    /// This method will automatically load all the pages. It may
+    /// require to make several HTTP calls to the QLDB Ledger as
+    /// each Page contains no more than 200 documents.
+    ///
+    /// It consumes the QueryBuilder in the process.
+    pub async fn execute(self) -> QLDBResult<DocumentCollection> {
+        let auto_rollback = self.auto_rollback;
+        let tx = self.tx.clone();
+
+        let result = self.get_cursor()?.load_all().await?;
+
+        if auto_rollback {
+            tx.rollback().await?;
+        }
+
+        Ok(result)
+    }
+
+    pub(crate) async fn execute_get_page(
+        &mut self,
+        page_token: &str,
+    ) -> QLDBResult<(Vec<IonValue>, Option<String>)> {
+        let result = self
+            .client
+            .send_command(create_next_page_command(
+                &self.tx.session,
+                &self.tx.transaction_id,
+                page_token,
+            ))
+            .await?;
+
+        let (values, next_page_token) = result
+            .fetch_page
+            .and_then(|page| page.page)
+            .map(|page| {
+                // Default of Vec is empty Vec
+                let values = page.values.unwrap_or_default();
+
+                (values, page.next_page_token)
+            })
+            .unwrap_or((vec![], None));
+
+        let values = valueholders_to_ionvalues(values)?;
+
+        Ok((values, next_page_token))
+    }
+
+    pub(crate) async fn execute_statement(
+        &mut self,
+    ) -> QLDBResult<(Vec<IonValue>, Option<String>)> {
         if self.tx.is_completed().await {
             return Err(QLDBError::TransactionCompleted);
+        }
+
+        if self.is_executed.load(Relaxed) {
+            return Err(QLDBError::QueryAlreadyExecuted);
         }
 
         // TODO: hash_query may be an expesive operation, maybe
@@ -56,6 +114,8 @@ impl QueryBuilder {
         self.tx.hash_query(&self.statement, &self.params).await;
 
         let params = std::mem::replace(&mut self.params, vec![]);
+
+        self.is_executed.store(true, Relaxed);
 
         let result = self
             .client
@@ -67,24 +127,30 @@ impl QueryBuilder {
             ))
             .await?;
 
-        // TODO: If the result is paged, return a object that keeps the page and
-        // is able to load the next page and decode the Ion Values.
-
-        let values = result
+        let (values, next_page_token) = result
             .execute_statement
             .and_then(|result| result.first_page)
-            // TODO: Store Page::next_page_token from the first_page Page object
-            .and_then(|result| result.values)
-            // Default of Vec is empty Vec
-            .unwrap_or_default();
+            .map(|result| {
+                // Default of Vec is empty Vec
+                let values = result.values.unwrap_or_default();
+
+                (values, result.next_page_token)
+            })
+            .unwrap_or((vec![], None));
 
         let values = valueholders_to_ionvalues(values)?;
 
-        if self.auto_rollback {
-            self.tx.rollback().await?;
+        Ok((values, next_page_token))
+    }
+
+    /// Creates a cursor for this query, allowing to load values
+    /// page by page. Each page in QLDB contains 200 documents.
+    pub fn get_cursor(self) -> QLDBResult<Cursor> {
+        if self.is_executed.load(Relaxed) {
+            return Err(QLDBError::QueryAlreadyExecuted);
         }
 
-        Ok(values)
+        Ok(Cursor::new(self))
     }
 
     /// Sends a query to QLDB that returns a count. Keep in mind that there isn't
@@ -96,16 +162,29 @@ impl QueryBuilder {
     /// If you want to make a simple count, it is better to use the count method
     /// from [Client::count](./struct.QLDBClient.html#method.count)
     ///
-    pub async fn count(&mut self) -> QLDBResult<i64> {
+    /// It consumes the QueryBuilder in the process.
+    pub async fn count(self) -> QLDBResult<i64> {
         let result = self.execute().await?;
 
-        match result.last() {
-            Some(IonValue::Struct(data)) => match data.get("_1") {
+        match result.into_inner().last() {
+            Some(ref doc) => match doc.get("_1") {
                 Some(IonValue::Integer(count)) => Ok(*count),
                 _ => Err(QLDBError::NonValidCountStatementResult),
             },
             _ => Err(QLDBError::NonValidCountStatementResult),
         }
+    }
+}
+
+impl Debug for QueryBuilder {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Transaction")
+            .field("tx", &self.tx)
+            .field("statement", &self.statement)
+            .field("params", &self.params)
+            .field("auto_rollback", &self.auto_rollback)
+            .finish()
     }
 }
 
@@ -144,6 +223,21 @@ fn create_send_command(
             statement: statement.to_string(),
             parameters: Some(params.into_iter().map(ionvalue_to_valueholder).collect()),
             transaction_id: transaction_id.to_string(),
+        }),
+        ..Default::default()
+    }
+}
+
+fn create_next_page_command(
+    session: &str,
+    transaction_id: &str,
+    next_page_token: &str,
+) -> SendCommandRequest {
+    SendCommandRequest {
+        session_token: Some(session.to_string()),
+        fetch_page: Some(FetchPageRequest {
+            transaction_id: transaction_id.to_string(),
+            next_page_token: next_page_token.to_string(),
         }),
         ..Default::default()
     }
