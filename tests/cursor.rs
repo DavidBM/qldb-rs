@@ -8,6 +8,10 @@ use rand::thread_rng;
 use rand::Rng;
 use utils::ensure_test_table;
 
+const DOCUMENTS_TO_INSERT_FOR_TESTING: usize = 800;
+const DOCUMENTS_PER_QUERY: usize = 40;
+const INSERT_LOOP_COUNT: usize = DOCUMENTS_TO_INSERT_FOR_TESTING / DOCUMENTS_PER_QUERY;
+
 #[async_std::test]
 async fn cursor_800_documents() {
     let client = QLDBClient::default("rust-crate-test").await.unwrap();
@@ -16,7 +20,7 @@ async fn cursor_800_documents() {
 
     let documents_model = format!("cursor_800_documents{}", rand_string());
 
-    for _ in 0..20 {
+    for _ in 0..INSERT_LOOP_COUNT {
         let table = test_table.clone();
         let model = documents_model.clone();
 
@@ -24,7 +28,7 @@ async fn cursor_800_documents() {
 
             let mut query = tx.query(&format!("INSERT INTO {} << ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? >>", &table));
 
-            for _ in 0..40 {
+            for _ in 0..DOCUMENTS_PER_QUERY {
                 query = query.param(get_qldb_struct(&model))
             }
 

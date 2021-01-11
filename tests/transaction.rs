@@ -43,13 +43,10 @@ async fn qldb_transaction() -> Result<()> {
 
             let count = client
                 .query(&format!("SELECT COUNT(*) FROM {}", test_table))
-                .execute()
+                .count()
                 .await?;
 
-            match &count[0].get("_1") {
-                Some(IonValue::Integer(count)) => assert_eq!(*count, first_count + 1),
-                _ => panic!("Second count returned a non integer"),
-            };
+            assert_eq!(count, first_count + 1);
 
             Ok(())
         })
@@ -106,15 +103,10 @@ async fn qldb_transaction_rollback() -> Result<()> {
             async move {
                 let count = client
                     .query(&format!("SELECT COUNT(*) FROM {}", test_table))
-                    .execute()
+                    .count()
                     .await?;
 
-                let count = match &count[0].get("_1") {
-                    Some(IonValue::Integer(count)) => count,
-                    _ => panic!("Second count returned a non integer"),
-                };
-
-                Ok(*count)
+                Ok(count)
             }
         })
         .await?;
