@@ -19,7 +19,7 @@ use std::collections::HashMap;
 let client = QLDBClient::default("rust-crate-test").await?;
 
 let mut value_to_insert = HashMap::new();
-// This will insert a documents with a key "test_column" 
+// This will insert a document with a key "test_column" 
 // with the value "IonValue::String(test_value)"
 value_to_insert.insert("test_column", "test_value");
 
