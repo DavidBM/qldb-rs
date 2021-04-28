@@ -16,7 +16,8 @@ repository = "https://github.com/Couragium/qldb-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ion-binary-rs = { git = "https://github.com/Couragium/ion-binary-rs", branch = "conversion_to_json_value" }
+#ion-binary-rs = { git = "https://github.com/Couragium/ion-binary-rs", branch = "conversion_to_json_value" }
+ion-binary-rs = { git = "https://github.com/Couragium/ion-binary-rs", branch = "master" }
 num-traits = "0.2.14"
 rusoto_qldb_session = { version = "0.45.0", default_features = false, features = ["rustls", "serialize_structs", "deserialize_structs"] }
 rusoto_core = { version = "0.45.0", default_features = false, features = ["rustls"] }

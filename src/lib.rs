@@ -66,3 +66,4 @@ pub use rusoto_core::Region;
 pub use transaction::Transaction;
 pub use types::{QLDBError, QLDBResult};
 pub use types::{QLDBExtractError, QLDBExtractResult};
+pub use ion_binary_rs;
