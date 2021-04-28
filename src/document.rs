@@ -68,7 +68,7 @@ impl Document {
             None => return Ok(None),
         };
 
-        match T::try_from(element.clone()) {
+        match T::try_from(element.clone().to_owned()) {
             Ok(result) => Ok(Some(result)),
             Err(err) => Err(QLDBExtractError::BadDataType(Box::new(err))),
         }
