@@ -70,7 +70,10 @@ impl Document {
 
         match T::try_from(element.clone()) {
             Ok(result) => Ok(Some(result)),
-            Err(err) => Err(QLDBExtractError::BadDataType(Box::new(err))),
+            Err(err) => {
+                println!("{}", std::any::type_name::<T>());
+                return Err(QLDBExtractError::BadDataType(Box::new(err)));
+            },
         }
     }
 }
