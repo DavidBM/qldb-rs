@@ -61,6 +61,7 @@ pub use client::QLDBClient;
 pub use cursor::Cursor;
 pub use document::Document;
 pub use document_collection::DocumentCollection;
+pub use ion_binary_rs as ion;
 pub use query_builder::QueryBuilder;
 pub use rusoto_core::Region;
 pub use transaction::Transaction;
