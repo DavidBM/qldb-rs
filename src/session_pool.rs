@@ -123,12 +123,13 @@ impl SessionPool {
         // Creates a session with the QLDB
         self.inner.count.fetch_add(1, Relaxed);
 
-        // TODO! Make the call to QLDB as in client::QLDBSession::get_session
-        Session::new("".to_string())
+        todo!("Make the call to QLDB as in client::QLDBSession::get_session")
+
+        //Session::new("".to_string())
     }
 
     async fn close_session(&self) -> Session {
-        todo!()
+        todo!("Closed session in QLDB")
     }
 
     pub async fn refill(&self) {
