@@ -25,6 +25,7 @@ thiserror = "1.0.22"
 sha2 = "0.9.2"
 chrono = "0.4.19"
 crossbeam-utils = "0.8.1"
+rand = "0.8.3"
 
 [dev-dependencies]
 async-std = { version = "1.7.0", features = ["attributes", "tokio02"] }

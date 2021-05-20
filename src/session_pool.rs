@@ -1,26 +1,15 @@
 use crossbeam_utils::atomic::AtomicCell;
-use futures::lock::Mutex;
-use futures::task::AtomicWaker;
-use futures::task::Context;
-use futures::task::Poll;
-use futures::Future;
-use std::collections::VecDeque;
+use futures::{Future, task::{AtomicWaker, Context, Poll}, lock::Mutex};
+use std::hash::Hash;
+use std::collections::{VecDeque, BTreeSet};
 use std::pin::Pin;
-use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicU64, Ordering::Relaxed}};
 use std::time::{Duration, Instant};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct InnerSession {
     created_on_instant: Instant,
     session_id: String,
-}
-
-impl Drop for InnerSession {
-    fn drop(&mut self) {
-        // TODO: The inner cell should have a reference to
-        // the counter of available sessions. An AtmicU64.
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -28,13 +17,28 @@ struct Session {
     inner: Arc<InnerSession>,
 }
 
+impl PartialEq for Session {
+    fn eq(&self, other: &Session) -> bool {
+        self.inner.session_id == other.inner.session_id
+    }
+}
+
 impl Session {
+    pub fn new(session_id: String) -> Session {
+        Session {
+            inner: Arc::new(InnerSession {
+                created_on_instant: Instant::now(),
+                session_id
+            })
+        }
+    }
+
     fn get_session_id(&self) -> &str {
         &self.inner.session_id
     }
 
-    fn get_age(&self, now: Instant) -> Duration {
-        self.inner.created_on_instant - now
+    fn get_age(&self) -> Duration {
+        self.inner.created_on_instant.elapsed()
     }
 }
 
@@ -42,15 +46,27 @@ impl Session {
 struct SessionPoolInner {
     pool: Mutex<VecDeque<Session>>,
     count: AtomicU64,
-    awaiting_for_connection: Mutex<Vec<SessionAwaiter>>,
+    awaiting_for_session: Mutex<BTreeSet<SessionAwaiter>>,
+    max_sessions: u16,
 }
 
 #[derive(Debug, Clone)]
-struct SessionPool {
+pub(crate) struct SessionPool {
     inner: Arc<SessionPoolInner>,
 }
 
 impl SessionPool {
+    pub fn new(max_sessions: u16) -> SessionPool {
+        SessionPool {
+            inner: Arc::new(SessionPoolInner {
+                pool: Mutex::new(VecDeque::new()),
+                count: AtomicU64::new(0),
+                awaiting_for_session: Mutex::new(BTreeSet::new()),
+                max_sessions
+            }),
+        }
+    }
+
     async fn get_session(&self) -> Session {
         let mut pool = self.inner.pool.lock().await;
 
@@ -59,19 +75,60 @@ impl SessionPool {
             None => {
                 drop(pool);
 
-                // Check if we already reached the max connections.
-                // If so, await
-                // If not yet, create a new session.
+                if self.inner.count.load(Relaxed) < self.inner.max_sessions.into() {
+                    let session = self.create_session().await;
+                    return session;
+                }
 
                 self.wait_until_session_is_available().await
             }
         }
     }
 
-    async fn return_session(&self, session: Session) {
-        // Check if the session is still valid
-        // Check if there is anyone waiting for sessions
-        // If so, give the connection
+    async fn return_session(&self, session: InnerSession) {
+        let session_age = session.created_on_instant.elapsed();
+
+        if session_age > Duration::from_secs(15) {
+            drop(session);
+            return;
+        }
+
+        let mut pool = self.inner.pool.lock().await;
+
+        let session = Session {
+            inner: Arc::new(session)
+        };
+
+        if pool.contains(&session) {
+            self.close_session().await;
+            return;
+        }
+
+        let mut connection_awaiters = self.inner
+            .awaiting_for_session
+            .lock()
+            .await;
+
+        if let Some(awaiter) = connection_awaiters.iter().next() {
+            let awaiter = awaiter.clone();
+            connection_awaiters.remove(&awaiter);
+            awaiter.awake(session);
+            return;
+        }
+
+        pool.push_back(session);
+    }
+
+    async fn create_session(&self) -> Session {
+        // Creates a session with the QLDB
+        self.inner.count.fetch_add(1, Relaxed);
+
+        // TODO! Make the call to QLDB as in client::QLDBSession::get_session
+        Session::new("".to_string())
+    }
+
+    async fn close_session(&self) -> Session {
+        todo!()
     }
 
     pub async fn refill(&self) {
@@ -87,12 +144,20 @@ impl SessionPool {
         let waker = SessionAwaiter::new();
 
         self.inner
-            .awaiting_for_connection
+            .awaiting_for_session
             .lock()
             .await
-            .push(waker.clone());
+            .insert(waker.clone());
 
-        waker.await
+        let session = waker.clone().await;
+
+        self.inner
+            .awaiting_for_session
+            .lock()
+            .await
+            .remove(&waker);
+
+        session
     }
 }
 
@@ -100,6 +165,34 @@ impl SessionPool {
 struct SessionAwaiter {
     session: Arc<AtomicCell<Option<Session>>>,
     waker: Arc<AtomicWaker>,
+    id: u64,
+    created_on: Instant
+}
+
+impl PartialEq for SessionAwaiter {
+    fn eq(&self, other: &SessionAwaiter) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for SessionAwaiter {}
+
+impl Hash for SessionAwaiter {
+    fn hash<H>(&self, hasher: &mut H) where H: std::hash::Hasher {
+        hasher.write_u64(self.id);
+    }
+}
+
+impl PartialOrd for SessionAwaiter {
+    fn partial_cmp(&self, other: &SessionAwaiter) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SessionAwaiter {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.created_on.cmp(&other.created_on)
+    }
 }
 
 impl SessionAwaiter {
@@ -107,6 +200,8 @@ impl SessionAwaiter {
         SessionAwaiter {
             session: Arc::new(AtomicCell::new(None)),
             waker: Arc::new(AtomicWaker::new()),
+            id: rand::random(),
+            created_on: Instant::now(),
         }
     }
 
@@ -114,8 +209,9 @@ impl SessionAwaiter {
         &self.waker
     }
 
-    async fn awake(&self, session: Session) {
+    fn awake(&self, session: Session) {
         self.session.store(Some(session));
+        self.waker.wake();
     }
 }
 

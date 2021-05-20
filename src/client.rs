@@ -1,4 +1,4 @@
-use crate::{QLDBError, QLDBResult, QueryBuilder, Transaction};
+use crate::{QLDBError, QLDBResult, QueryBuilder, Transaction, session_pool::SessionPool};
 use rusoto_core::{credential::ChainProvider, request::HttpClient, Region};
 use rusoto_qldb_session::{
     EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest,
@@ -14,6 +14,7 @@ use std::sync::Arc;
 pub struct QLDBClient {
     client: Arc<QldbSessionClient>,
     ledger_name: String,
+    pool: SessionPool,
 }
 
 impl QLDBClient {
@@ -33,8 +34,10 @@ impl QLDBClient {
     /// If it is not present it will fallback on the value associated with the current
     /// profile in ~/.aws/config or the file specified by the AWS_CONFIG_FILE environment
     /// variable. If that is malformed of absent it will fall back on Region::UsEast1
+    /// 
+    /// The client pools the QLDB sessions. QLDB has a hard limit if 1500 sessions.
     ///
-    pub async fn default(ledger_name: &str) -> QLDBResult<QLDBClient> {
+    pub async fn default(ledger_name: &str, max_pool_sessions: u16) -> QLDBResult<QLDBClient> {
         let region = Region::default();
 
         let credentials = ChainProvider::default();
@@ -51,6 +54,7 @@ impl QLDBClient {
         Ok(QLDBClient {
             client,
             ledger_name: ledger_name.to_string(),
+            pool: SessionPool::new(max_pool_sessions),
         })
     }
 
