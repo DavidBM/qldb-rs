@@ -22,8 +22,9 @@ enum TransactionStatus {
 #[derive(Clone)]
 pub struct Transaction {
     client: Arc<QldbSessionClient>,
+    session_pool: Arc<SessionPool>,
     pub(crate) transaction_id: Arc<String>,
-    pub(crate) session: Arc<String>,
+    pub(crate) session: Arc<Session>,
     completed: Arc<Mutex<TransactionStatus>>,
     hasher: Arc<Mutex<IonHash>>,
     auto_rollback: bool,
@@ -32,18 +33,21 @@ pub struct Transaction {
 impl Transaction {
     pub(crate) async fn new(
         client: Arc<QldbSessionClient>,
-        session: &str,
+        session_pool: Arc<SessionPool>,
+        session: Session,
         auto_rollback: bool,
-    ) -> QLDBResult<Transaction> {
-        let transaction_id = Transaction::get_transaction_id(&client, session).await?;
+    ) -> QldbResult<Transaction> {
+        let transaction_id =
+            Transaction::get_transaction_id(&client, session.get_session_id()).await?;
 
         // TODO: Add transaction_id to the IonHash
         let hasher = IonHash::from_ion_value::<Sha256>(&IonValue::String(transaction_id.clone()));
 
         Ok(Transaction {
             client,
+            session_pool,
             transaction_id: Arc::new(transaction_id),
-            session: Arc::new(session.into()),
+            session: Arc::new(session),
             completed: Arc::new(Mutex::new(TransactionStatus::Open)),
             hasher: Arc::new(Mutex::new(hasher)),
             auto_rollback,
@@ -74,7 +78,7 @@ impl Transaction {
 
                 self.client
                     .send_command(create_commit_command(
-                        &self.session,
+                        self.session.get_session_id(),
                         &self.transaction_id,
                         &commit_digest,
                     ))
@@ -82,7 +86,7 @@ impl Transaction {
             }
         }
 
-        *is_completed = Commit;
+        self.complete(is_completed, Commit);
 
         // TODO: Check the returned CommitDigest with the
         // current hash and fail if they are not equal.
@@ -115,7 +119,7 @@ impl Transaction {
             Commit => return Err(QLDBError::TransactionAlreadyCommitted),
             Open => {
                 self.client
-                    .send_command(create_rollback_command(&self.session))
+                    .send_command(create_rollback_command(self.session.get_session_id()))
                     .await?;
             }
         }
@@ -150,6 +154,16 @@ impl Transaction {
             Commit | Rollback => true,
             Open => false,
         }
+    }
+
+    fn complete(
+        &self,
+        mut is_completed: MutexGuard<'_, TransactionStatus>,
+        status: TransactionStatus,
+    ) {
+        *is_completed = status;
+        // TODO: We maybe shouldn't be ignoring this error
+        let _ = self.session_pool.give_back((*self.session).clone());
     }
 
     pub(crate) async fn hash_query(&self, statement: &str, params: &[IonValue]) {
