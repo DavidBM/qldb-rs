@@ -1,6 +1,8 @@
-use crate::types::{QLDBError, QLDBResult};
+use crate::session_pool::{Session, SessionPool};
+use crate::types::{QldbError, QldbResult};
 use crate::QueryBuilder;
 use futures::lock::Mutex;
+use futures::lock::MutexGuard;
 use ion_binary_rs::{IonEncoder, IonHash, IonValue};
 use rusoto_qldb_session::{
     AbortTransactionRequest, CommitTransactionRequest, QldbSession, QldbSessionClient,
@@ -65,14 +67,14 @@ impl Transaction {
         )
     }
 
-    pub async fn commit(&self) -> QLDBResult<()> {
+    pub async fn commit(&self) -> QldbResult<()> {
         use TransactionStatus::*;
 
-        let mut is_completed = self.completed.lock().await;
+        let is_completed = self.completed.lock().await;
 
         match *is_completed {
             Commit => return Ok(()),
-            Rollback => return Err(QLDBError::TransactionAlreadyRollback),
+            Rollback => return Err(QldbError::TransactionAlreadyRollback),
             Open => {
                 let commit_digest = self.hasher.lock().await.get().to_owned();
 
@@ -94,10 +96,10 @@ impl Transaction {
         Ok(())
     }
 
-    pub(crate) async fn silent_commit(&self) -> QLDBResult<()> {
+    pub(crate) async fn silent_commit(&self) -> QldbResult<()> {
         match self.commit().await {
             Ok(_) => Ok(()),
-            Err(QLDBError::TransactionAlreadyRollback) => Ok(()),
+            Err(QldbError::TransactionAlreadyRollback) => Ok(()),
             Err(error) => Err(error),
         }
     }
@@ -109,14 +111,14 @@ impl Transaction {
     /// It fails is the transaction is already committed. For
     /// a rollback that doesn't fail when already committed you can
     /// check the `silent_rollback` method.
-    pub async fn rollback(&self) -> QLDBResult<()> {
+    pub async fn rollback(&self) -> QldbResult<()> {
         use TransactionStatus::*;
 
-        let mut is_completed = self.completed.lock().await;
+        let is_completed = self.completed.lock().await;
 
         match *is_completed {
             Rollback => return Ok(()),
-            Commit => return Err(QLDBError::TransactionAlreadyCommitted),
+            Commit => return Err(QldbError::TransactionAlreadyCommitted),
             Open => {
                 self.client
                     .send_command(create_rollback_command(self.session.get_session_id()))
@@ -124,7 +126,7 @@ impl Transaction {
             }
         }
 
-        *is_completed = Rollback;
+        self.complete(is_completed, Rollback);
 
         Ok(())
     }
@@ -137,10 +139,10 @@ impl Transaction {
     /// Once rollback is called the
     /// transaction becomes invalid. Subsequent calls to rollback or
     /// commit (internally) won't have any effect.
-    pub async fn silent_rollback(&self) -> QLDBResult<()> {
+    pub async fn silent_rollback(&self) -> QldbResult<()> {
         match self.rollback().await {
             Ok(_) => Ok(()),
-            Err(QLDBError::TransactionAlreadyCommitted) => Ok(()),
+            Err(QldbError::TransactionAlreadyCommitted) => Ok(()),
             Err(error) => Err(error),
         }
     }
@@ -183,7 +185,7 @@ impl Transaction {
     async fn get_transaction_id(
         client: &Arc<QldbSessionClient>,
         session: &str,
-    ) -> QLDBResult<String> {
+    ) -> QldbResult<String> {
         let response = client
             .send_command(create_start_transaction_command(session))
             .await?;
@@ -191,16 +193,12 @@ impl Transaction {
         let token = match response.start_transaction {
             Some(session) => match session.transaction_id {
                 Some(token) => token,
-                None => return Err(QLDBError::QLDBReturnedEmptyTransaction),
+                None => return Err(QldbError::QldbReturnedEmptyTransaction),
             },
-            None => return Err(QLDBError::QLDBReturnedEmptyTransaction),
+            None => return Err(QldbError::QldbReturnedEmptyTransaction),
         };
 
         Ok(token)
-    }
-
-    pub(crate) fn get_session(&self) -> &str {
-        &self.session
     }
 }
 

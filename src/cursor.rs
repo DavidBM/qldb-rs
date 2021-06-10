@@ -1,5 +1,5 @@
 use crate::DocumentCollection;
-use crate::{QLDBResult, QueryBuilder};
+use crate::{QldbResult, QueryBuilder};
 use std::convert::TryInto;
 
 /// Cursor allows to get all values from a statement page by page.
@@ -11,12 +11,12 @@ use std::convert::TryInto;
 /// in order to load all values.
 ///
 /// ```rust,no_run
-/// use qldb::{QLDBClient, Cursor};
+/// use qldb::{QldbClient, Cursor};
 /// # use std::collections::HashMap;
 /// # use eyre::Result;
 ///
 /// # async fn test() -> Result<()> {
-/// let client = QLDBClient::default("rust-crate-test").await?;
+/// let client = QldbClient::default("rust-crate-test", 200).await?;
 ///
 /// let mut value_to_insert = HashMap::new();
 /// // This will insert a documents with a key "test_column"
@@ -66,9 +66,9 @@ impl Cursor {
     /// which means that there isn't more pages to query
     ///
     /// ```rust,no_run
-    /// # use qldb::{Cursor, QLDBResult};
+    /// # use qldb::{Cursor, QldbResult};
     ///
-    /// # async fn test(mut cursor: Cursor) ->  QLDBResult<()> {
+    /// # async fn test(mut cursor: Cursor) ->  QldbResult<()> {
     ///     while let Some(mut values) = cursor.load_more().await? {
     ///         println!("{:?}", values);
     ///     }
@@ -77,7 +77,7 @@ impl Cursor {
     /// # }
     ///
     /// ```
-    pub async fn load_more(&mut self) -> QLDBResult<Option<DocumentCollection>> {
+    pub async fn load_more(&mut self) -> QldbResult<Option<DocumentCollection>> {
         let (values, next_page_token) = if self.is_first_page {
             self.query_builder.execute_statement().await?
         } else if let Some(page) = &self.next_page {
@@ -95,7 +95,7 @@ impl Cursor {
     }
 
     /// Loads all pages from the cursor and consumes it in the process.
-    pub async fn load_all(mut self) -> QLDBResult<DocumentCollection> {
+    pub async fn load_all(mut self) -> QldbResult<DocumentCollection> {
         let mut result = DocumentCollection::new(vec![]);
 
         while let Some(values) = self.load_more().await? {

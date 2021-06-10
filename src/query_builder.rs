@@ -1,4 +1,4 @@
-use crate::{Cursor, DocumentCollection, QLDBError, QLDBResult, Transaction};
+use crate::{Cursor, DocumentCollection, QldbError, QldbResult, Transaction};
 use ion_binary_rs::{IonEncoder, IonParser, IonValue};
 use rusoto_qldb_session::{
     ExecuteStatementRequest, FetchPageRequest, QldbSession, QldbSessionClient, SendCommandRequest,
@@ -55,7 +55,7 @@ impl QueryBuilder {
     /// each Page contains no more than 200 documents.
     ///
     /// It consumes the QueryBuilder in the process.
-    pub async fn execute(self) -> QLDBResult<DocumentCollection> {
+    pub async fn execute(self) -> QldbResult<DocumentCollection> {
         let auto_rollback = self.auto_rollback;
         let tx = self.tx.clone();
 
@@ -71,11 +71,11 @@ impl QueryBuilder {
     pub(crate) async fn execute_get_page(
         &mut self,
         page_token: &str,
-    ) -> QLDBResult<(Vec<IonValue>, Option<String>)> {
+    ) -> QldbResult<(Vec<IonValue>, Option<String>)> {
         let result = self
             .client
             .send_command(create_next_page_command(
-                &self.tx.session,
+                self.tx.session.get_session_id(),
                 &self.tx.transaction_id,
                 page_token,
             ))
@@ -99,13 +99,13 @@ impl QueryBuilder {
 
     pub(crate) async fn execute_statement(
         &mut self,
-    ) -> QLDBResult<(Vec<IonValue>, Option<String>)> {
+    ) -> QldbResult<(Vec<IonValue>, Option<String>)> {
         if self.tx.is_completed().await {
-            return Err(QLDBError::TransactionCompleted);
+            return Err(QldbError::TransactionCompleted);
         }
 
         if self.is_executed.load(Relaxed) {
-            return Err(QLDBError::QueryAlreadyExecuted);
+            return Err(QldbError::QueryAlreadyExecuted);
         }
 
         // TODO: hash_query may be an expesive operation, maybe
@@ -120,7 +120,7 @@ impl QueryBuilder {
         let result = self
             .client
             .send_command(create_send_command(
-                &self.tx.session,
+                self.tx.session.get_session_id(),
                 &self.tx.transaction_id,
                 &self.statement,
                 params,
@@ -145,9 +145,9 @@ impl QueryBuilder {
 
     /// Creates a cursor for this query, allowing to load values
     /// page by page. Each page in QLDB contains 200 documents.
-    pub fn get_cursor(self) -> QLDBResult<Cursor> {
+    pub fn get_cursor(self) -> QldbResult<Cursor> {
         if self.is_executed.load(Relaxed) {
-            return Err(QLDBError::QueryAlreadyExecuted);
+            return Err(QldbError::QueryAlreadyExecuted);
         }
 
         Ok(Cursor::new(self))
@@ -163,15 +163,15 @@ impl QueryBuilder {
     /// from [Client::count](./struct.QLDBClient.html#method.count)
     ///
     /// It consumes the QueryBuilder in the process.
-    pub async fn count(self) -> QLDBResult<i64> {
+    pub async fn count(self) -> QldbResult<i64> {
         let result = self.execute().await?;
 
         match result.into_inner().last() {
             Some(ref doc) => match doc.get("_1") {
                 Some(IonValue::Integer(count)) => Ok(*count),
-                _ => Err(QLDBError::NonValidCountStatementResult),
+                _ => Err(QldbError::NonValidCountStatementResult),
             },
-            _ => Err(QLDBError::NonValidCountStatementResult),
+            _ => Err(QldbError::NonValidCountStatementResult),
         }
     }
 }
@@ -188,7 +188,7 @@ impl Debug for QueryBuilder {
     }
 }
 
-fn valueholders_to_ionvalues(values: Vec<ValueHolder>) -> QLDBResult<Vec<IonValue>> {
+fn valueholders_to_ionvalues(values: Vec<ValueHolder>) -> QldbResult<Vec<IonValue>> {
     let mut decoded_values = vec![];
 
     for value in values {
@@ -200,8 +200,8 @@ fn valueholders_to_ionvalues(values: Vec<ValueHolder>) -> QLDBResult<Vec<IonValu
 
         let parsed_values = IonParser::new(&bytes[..])
             .consume_all()
-            // TODO: Add impl From<IonParserError> for QLDBError in ion_binary_rs
-            .map_err(QLDBError::IonParserError)?;
+            // TODO: Add impl From<IonParserError> for QldbError in ion_binary_rs
+            .map_err(QldbError::IonParserError)?;
 
         for value in parsed_values {
             decoded_values.push(value);

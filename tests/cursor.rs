@@ -2,7 +2,7 @@ mod utils;
 
 use ion_binary_rs::IonValue;
 use qldb::DocumentCollection;
-use qldb::QLDBClient;
+use qldb::QldbClient;
 use rand::distributions::Alphanumeric;
 use rand::thread_rng;
 use rand::Rng;
@@ -14,7 +14,7 @@ const INSERT_LOOP_COUNT: usize = DOCUMENTS_TO_INSERT_FOR_TESTING / DOCUMENTS_PER
 
 #[async_std::test]
 async fn cursor_800_documents() {
-    let client = QLDBClient::default("rust-crate-test").await.unwrap();
+    let client = QldbClient::default("rust-crate-test", 200).await.unwrap();
 
     let test_table = ensure_test_table(&client).await;
 

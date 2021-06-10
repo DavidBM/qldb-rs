@@ -11,12 +11,12 @@
 //! ## Example
 //!
 //! ```rust,no_run
-//! use qldb::QLDBClient;
+//! use qldb::QldbClient;
 //! use std::collections::HashMap;
 //! # use eyre::Result;
 //!
 //! # async fn test() -> Result<()> {
-//! let client = QLDBClient::default("rust-crate-test").await?;
+//! let client = QldbClient::default("rust-crate-test", 200).await?;
 //!
 //! let mut value_to_insert = HashMap::new();
 //! // This will insert a documents with a key "test_column"
@@ -54,10 +54,11 @@ mod cursor;
 mod document;
 mod document_collection;
 mod query_builder;
+mod session_pool;
 mod transaction;
 mod types;
 
-pub use client::QLDBClient;
+pub use client::QldbClient;
 pub use cursor::Cursor;
 pub use document::Document;
 pub use document_collection::DocumentCollection;
@@ -65,5 +66,5 @@ pub use ion_binary_rs as ion;
 pub use query_builder::QueryBuilder;
 pub use rusoto_core::Region;
 pub use transaction::Transaction;
-pub use types::{QLDBError, QLDBResult};
-pub use types::{QLDBExtractError, QLDBExtractResult};
+pub use types::{QldbError, QldbResult};
+pub use types::{QldbExtractError, QldbExtractResult};
