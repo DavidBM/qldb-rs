@@ -1,8 +1,6 @@
 use crate::{session_pool::SessionPool, QldbResult, QueryBuilder, Transaction};
 use rusoto_core::{credential::ChainProvider, request::HttpClient, Region};
-use rusoto_qldb_session::{
-    EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest,
-};
+use rusoto_qldb_session::QldbSessionClient;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -11,14 +9,14 @@ use std::sync::Arc;
 ///
 /// The recommended method is `transaction_within`.
 #[derive(Clone)]
-pub struct QLDBClient {
+pub struct QldbClient {
     client: Arc<QldbSessionClient>,
     ledger_name: String,
     session_pool: Arc<SessionPool>,
 }
 
-impl QLDBClient {
-    /// Creates a new QLDBClient.
+impl QldbClient {
+    /// Creates a new QldbClient.
     ///
     /// This function will take the credentials from several locations in this order:
     ///
@@ -35,7 +33,7 @@ impl QLDBClient {
     /// profile in ~/.aws/config or the file specified by the AWS_CONFIG_FILE environment
     /// variable. If that is malformed of absent it will fall back on Region::UsEast1
     ///
-    pub async fn default(ledger_name: &str) -> QLDBResult<QLDBClient> {
+    pub async fn default(ledger_name: &str, max_sessions: u16) -> QldbResult<QldbClient> {
         let region = Region::default();
 
         let credentials = ChainProvider::default();
@@ -66,7 +64,7 @@ impl QLDBClient {
     ///
     /// This is a good option when you want to execute an isolated non-ACID
     /// SELECT/COUNT statement.
-    pub async fn read_query(&self, statement: &str) -> QLDBResult<QueryBuilder> {
+    pub async fn read_query(&self, statement: &str) -> QldbResult<QueryBuilder> {
         let transaction = self.auto_rollback_transaction().await?;
 
         Ok(transaction.query(statement))
