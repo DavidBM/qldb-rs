@@ -274,8 +274,8 @@ async fn close_session(
         tries = tries.saturating_add(1);
 
         match qldb_close_session(qldb_client, session).await {
-            Ok(session) => break Ok(session),
-            Err(error) if tries > 10 => break Err(error),
+            Ok(_) => break,
+            Err(_) if tries > 10 => break,
             Err(_) => {
                 Timer::after(Duration::from_millis(tries.pow(tries * 10).into())).await;
             }
