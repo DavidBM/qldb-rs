@@ -1,8 +1,8 @@
 mod utils;
 use eyre::Result;
 use ion_binary_rs::IonValue;
-use qldb::QLDBClient;
-use qldb::QLDBError::SendCommandError;
+use qldb::QldbClient;
+use qldb::QldbError::SendCommandError;
 use rusoto_core::RusotoError::Service;
 use rusoto_qldb_session::SendCommandError::OccConflict;
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ use utils::ensure_test_table;
 // test/reference_impl/qldb_transaction.js
 #[async_std::test]
 async fn qldb_transaction() -> Result<()> {
-    let client = QLDBClient::default("rust-crate-test").await?;
+    let client = QldbClient::default("rust-crate-test", 200).await?;
 
     let test_table = ensure_test_table(&client).await;
 
@@ -57,7 +57,7 @@ async fn qldb_transaction() -> Result<()> {
 
 #[async_std::test]
 async fn qldb_transaction_rollback() -> Result<()> {
-    let client = QLDBClient::default("rust-crate-test").await?;
+    let client = QldbClient::default("rust-crate-test", 200).await?;
 
     let test_table = ensure_test_table(&client).await;
 
@@ -120,7 +120,7 @@ async fn qldb_transaction_rollback() -> Result<()> {
 
 #[async_std::test]
 async fn qldb_transaction_occ_conflict() -> Result<()> {
-    let client = QLDBClient::default("rust-crate-test").await?;
+    let client = QldbClient::default("rust-crate-test", 200).await?;
 
     let test_table = ensure_test_table(&client).await;
 
@@ -176,7 +176,7 @@ async fn qldb_transaction_occ_conflict() -> Result<()> {
 
 #[async_std::test]
 async fn qldb_transaction_simple_select() -> Result<()> {
-    let client = QLDBClient::default("rust-crate-test").await?;
+    let client = QldbClient::default("rust-crate-test", 200).await?;
 
     let test_table = ensure_test_table(&client).await;
 

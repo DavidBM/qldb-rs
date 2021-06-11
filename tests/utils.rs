@@ -1,6 +1,6 @@
 use eyre::Result;
 use ion_binary_rs::IonValue;
-use qldb::QLDBClient;
+use qldb::QldbClient;
 use std::collections::HashMap;
 
 #[allow(dead_code)]
@@ -8,7 +8,7 @@ pub async fn create_type_test<F: FnOnce(HashMap<String, IonValue>)>(
     insert_data: IonValue,
     test_callback: F,
 ) -> Result<()> {
-    let client = QLDBClient::default("rust-crate-test").await?;
+    let client = QldbClient::default("rust-crate-test", 200).await?;
 
     let test_table = ensure_test_table(&client).await;
 
@@ -55,11 +55,11 @@ pub async fn create_type_test<F: FnOnce(HashMap<String, IonValue>)>(
     Ok(())
 }
 
-pub async fn ensure_test_table(client: &QLDBClient) -> String {
+pub async fn ensure_test_table(client: &QldbClient) -> String {
     let result = client
         .transaction_within(|client| async move {
             let _ = client
-                .query("CREATE TABLE QldbLibRsTest;")
+                .query("CREATE TABLE QldbLibRsTest")
                 .execute()
                 .await?;
 

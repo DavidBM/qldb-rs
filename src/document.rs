@@ -1,4 +1,4 @@
-use crate::types::{QLDBExtractError, QLDBExtractResult};
+use crate::types::{QldbExtractError, QldbExtractResult};
 use ion_binary_rs::IonValue;
 use std::{collections::HashMap, convert::TryFrom};
 
@@ -8,9 +8,9 @@ use std::{collections::HashMap, convert::TryFrom};
 /// the IonValue to your type.
 ///
 /// ```rust,no_run
-/// use qldb::{QLDBExtractResult, Document};
+/// use qldb::{QldbExtractResult, Document};
 ///
-/// fn test(document: Document) -> QLDBExtractResult<u64> {
+/// fn test(document: Document) -> QldbExtractResult<u64> {
 ///
 ///     let points: u64 = document.get_value("points")?;
 ///
@@ -23,12 +23,12 @@ pub struct Document {
 }
 
 impl TryFrom<IonValue> for Document {
-    type Error = QLDBExtractError;
+    type Error = QldbExtractError;
 
     fn try_from(value: IonValue) -> Result<Self, Self::Error> {
         match value {
             IonValue::Struct(value) => Ok(Document { document: value }),
-            _ => Err(QLDBExtractError::NotADocument(value)),
+            _ => Err(QldbExtractError::NotADocument(value)),
         }
     }
 }
@@ -36,7 +36,7 @@ impl TryFrom<IonValue> for Document {
 impl Document {
     /// Extract a value from the document and tries to transform to the value of the return type.
     /// Fails if the property is not there.
-    pub fn get_value<T>(&self, name: &str) -> QLDBExtractResult<T>
+    pub fn get_value<T>(&self, name: &str) -> QldbExtractResult<T>
     where
         T: TryFrom<IonValue> + Send + Sync + Clone,
         <T as TryFrom<IonValue>>::Error: std::error::Error + Send + Sync + 'static,
@@ -44,11 +44,11 @@ impl Document {
         let element = self
             .document
             .get(name)
-            .ok_or_else(|| QLDBExtractError::MissingProperty(name.to_string()))?;
+            .ok_or_else(|| QldbExtractError::MissingProperty(name.to_string()))?;
 
         match T::try_from(element.clone()) {
             Ok(result) => Ok(result),
-            Err(err) => Err(QLDBExtractError::BadDataType(Box::new(err))),
+            Err(err) => Err(QldbExtractError::BadDataType(Box::new(err))),
         }
     }
 
@@ -58,7 +58,7 @@ impl Document {
     }
 
     /// Same as `extract_value` but it returns None if the property is not there.
-    pub fn get_optional_value<T>(&self, name: &str) -> QLDBExtractResult<Option<T>>
+    pub fn get_optional_value<T>(&self, name: &str) -> QldbExtractResult<Option<T>>
     where
         T: TryFrom<IonValue> + Send + Sync + Clone,
         <T as TryFrom<IonValue>>::Error: std::error::Error + Send + Sync + 'static,
@@ -70,7 +70,7 @@ impl Document {
 
         match T::try_from(element.clone()) {
             Ok(result) => Ok(Some(result)),
-            Err(err) => Err(QLDBExtractError::BadDataType(Box::new(err))),
+            Err(err) => Err(QldbExtractError::BadDataType(Box::new(err))),
         }
     }
 }

@@ -1,8 +1,6 @@
-use crate::{QLDBError, QLDBResult, QueryBuilder, Transaction};
+use crate::{session_pool::SessionPool, QldbResult, QueryBuilder, Transaction};
 use rusoto_core::{credential::ChainProvider, request::HttpClient, Region};
-use rusoto_qldb_session::{
-    EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest,
-};
+use rusoto_qldb_session::QldbSessionClient;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -11,13 +9,14 @@ use std::sync::Arc;
 ///
 /// The recommended method is `transaction_within`.
 #[derive(Clone)]
-pub struct QLDBClient {
+pub struct QldbClient {
     client: Arc<QldbSessionClient>,
     ledger_name: String,
+    session_pool: Arc<SessionPool>,
 }
 
-impl QLDBClient {
-    /// Creates a new QLDBClient.
+impl QldbClient {
+    /// Creates a new QldbClient.
     ///
     /// This function will take the credentials from several locations in this order:
     ///
@@ -34,7 +33,7 @@ impl QLDBClient {
     /// profile in ~/.aws/config or the file specified by the AWS_CONFIG_FILE environment
     /// variable. If that is malformed of absent it will fall back on Region::UsEast1
     ///
-    pub async fn default(ledger_name: &str) -> QLDBResult<QLDBClient> {
+    pub async fn default(ledger_name: &str, max_sessions: u16) -> QldbResult<QldbClient> {
         let region = Region::default();
 
         let credentials = ChainProvider::default();
@@ -48,9 +47,12 @@ impl QLDBClient {
             region,
         ));
 
-        Ok(QLDBClient {
+        let session_pool = Arc::new(SessionPool::new(client.clone(), ledger_name, max_sessions));
+
+        Ok(QldbClient {
             client,
             ledger_name: ledger_name.to_string(),
+            session_pool,
         })
     }
 
@@ -62,7 +64,7 @@ impl QLDBClient {
     ///
     /// This is a good option when you want to execute an isolated non-ACID
     /// SELECT/COUNT statement.
-    pub async fn read_query(&self, statement: &str) -> QLDBResult<QueryBuilder> {
+    pub async fn read_query(&self, statement: &str) -> QldbResult<QueryBuilder> {
         let transaction = self.auto_rollback_transaction().await?;
 
         Ok(transaction.query(statement))
@@ -76,24 +78,36 @@ impl QLDBClient {
     /// Use this method if you really need to use the transaction handler
     /// directly. If not, you may be better off using the method
     /// `transaction_within`.
-    pub async fn transaction(&self) -> QLDBResult<Transaction> {
-        let session = self.get_session().await?;
+    pub async fn transaction(&self) -> QldbResult<Transaction> {
+        let session = self.session_pool.get().await?;
 
-        Ok(Transaction::new(self.client.clone(), &session, false).await?)
+        Ok(Transaction::new(
+            self.client.clone(),
+            self.session_pool.clone(),
+            session,
+            false,
+        )
+        .await?)
     }
 
-    pub(crate) async fn auto_rollback_transaction(&self) -> QLDBResult<Transaction> {
-        let session = self.get_session().await?;
+    pub(crate) async fn auto_rollback_transaction(&self) -> QldbResult<Transaction> {
+        let session = self.session_pool.get().await?;
 
-        Ok(Transaction::new(self.client.clone(), &session, true).await?)
+        Ok(Transaction::new(
+            self.client.clone(),
+            self.session_pool.clone(),
+            session,
+            true,
+        )
+        .await?)
     }
 
     /// It call the closure providing an already made transaction. Once the
     /// closure finishes it will call commit or rollback if any error.
-    pub async fn transaction_within<F, R, FR>(&self, clousure: F) -> QLDBResult<R>
+    pub async fn transaction_within<F, R, FR>(&self, clousure: F) -> QldbResult<R>
     where
         R: std::fmt::Debug,
-        FR: Future<Output = QLDBResult<R>>,
+        FR: Future<Output = QldbResult<R>>,
         F: FnOnce(Transaction) -> FR,
     {
         let transaction = self.transaction().await?;
@@ -103,48 +117,12 @@ impl QLDBClient {
         match result {
             Ok(result) => {
                 transaction.silent_commit().await?;
-                self.close_session(transaction.get_session()).await?;
                 Ok(result)
             }
             Err(error) => {
                 transaction.silent_rollback().await?;
-                self.close_session(transaction.get_session()).await?;
                 Err(error)
             }
         }
-    }
-
-    async fn close_session(&self, session: &str) -> QLDBResult<()> {
-        self.client
-            .send_command(SendCommandRequest {
-                session_token: Some(session.to_string()),
-                end_session: Some(EndSessionRequest {}),
-                ..Default::default()
-            })
-            .await?;
-
-        Ok(())
-    }
-
-    async fn get_session(&self) -> QLDBResult<String> {
-        let response = self
-            .client
-            .send_command(SendCommandRequest {
-                start_session: Some(StartSessionRequest {
-                    ledger_name: self.ledger_name.clone(),
-                }),
-                ..Default::default()
-            })
-            .await?;
-
-        let token = match response.start_session {
-            Some(session) => match session.session_token {
-                Some(token) => token,
-                None => return Err(QLDBError::QLDBReturnedEmptySession),
-            },
-            None => return Err(QLDBError::QLDBReturnedEmptySession),
-        };
-
-        Ok(token)
     }
 }

@@ -1,20 +1,19 @@
+use crate::session_pool::SessionRequestError;
 use ion_binary_rs::IonParserError;
 use rusoto_core::{request::TlsError, RusotoError};
 use rusoto_qldb_session::SendCommandError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum QLDBError {
+pub enum QldbError {
     #[error("The QLDB command returned an error")]
     SendCommandError(#[from] RusotoError<SendCommandError>),
     #[error("We requested a session but QLDB returned nothing")]
-    QLDBReturnedEmptySession,
+    QldbReturnedEmptySession,
     #[error("We requested a transaction id but QLDB returned nothing")]
-    QLDBReturnedEmptyTransaction,
-    // TODO: IonParserError seems to not be compatible
-    // with "#[from]". Make it compatible
+    QldbReturnedEmptyTransaction,
     #[error("We requested a transaction id but QLDB returned nothing")]
-    IonParserError(IonParserError),
+    IonParserError(#[from] IonParserError),
     #[error("Error when creating the HttpClient")]
     TlsError(#[from] TlsError),
     #[error("Transaction has been already commit or rollback")]
@@ -32,13 +31,15 @@ pub enum QLDBError {
     )]
     QueryAlreadyExecuted,
     #[error("Error extranting the QLDB returned Ion values to the requested type.")]
-    QLDBExtractError(#[from] QLDBExtractError),
+    QldbExtractError(#[from] QldbExtractError),
+    #[error("Cannot get session from session pool.")]
+    SessionPool(#[from] SessionRequestError),
 }
 
-pub type QLDBResult<T> = Result<T, QLDBError>;
+pub type QldbResult<T> = Result<T, QldbError>;
 
 #[derive(Debug, Error)]
-pub enum QLDBExtractError {
+pub enum QldbExtractError {
     #[error("Cannot convert the IonValue to the requested type.")]
     BadDataType(Box<dyn std::error::Error + Send + Sync + 'static>),
     #[error("Missing property in the QLDB Document {0}")]
@@ -47,4 +48,4 @@ pub enum QLDBExtractError {
     NotADocument(ion_binary_rs::IonValue),
 }
 
-pub type QLDBExtractResult<T> = Result<T, QLDBExtractError>;
+pub type QldbExtractResult<T> = Result<T, QldbExtractError>;

@@ -1,6 +1,8 @@
-use crate::types::{QLDBError, QLDBResult};
+use crate::session_pool::{Session, SessionPool};
+use crate::types::{QldbError, QldbResult};
 use crate::QueryBuilder;
 use futures::lock::Mutex;
+use futures::lock::MutexGuard;
 use ion_binary_rs::{IonEncoder, IonHash, IonValue};
 use rusoto_qldb_session::{
     AbortTransactionRequest, CommitTransactionRequest, QldbSession, QldbSessionClient,
@@ -22,8 +24,9 @@ enum TransactionStatus {
 #[derive(Clone)]
 pub struct Transaction {
     client: Arc<QldbSessionClient>,
+    session_pool: Arc<SessionPool>,
     pub(crate) transaction_id: Arc<String>,
-    pub(crate) session: Arc<String>,
+    pub(crate) session: Arc<Session>,
     completed: Arc<Mutex<TransactionStatus>>,
     hasher: Arc<Mutex<IonHash>>,
     auto_rollback: bool,
@@ -32,18 +35,21 @@ pub struct Transaction {
 impl Transaction {
     pub(crate) async fn new(
         client: Arc<QldbSessionClient>,
-        session: &str,
+        session_pool: Arc<SessionPool>,
+        session: Session,
         auto_rollback: bool,
-    ) -> QLDBResult<Transaction> {
-        let transaction_id = Transaction::get_transaction_id(&client, session).await?;
+    ) -> QldbResult<Transaction> {
+        let transaction_id =
+            Transaction::get_transaction_id(&client, session.get_session_id()).await?;
 
         // TODO: Add transaction_id to the IonHash
         let hasher = IonHash::from_ion_value::<Sha256>(&IonValue::String(transaction_id.clone()));
 
         Ok(Transaction {
             client,
+            session_pool,
             transaction_id: Arc::new(transaction_id),
-            session: Arc::new(session.into()),
+            session: Arc::new(session),
             completed: Arc::new(Mutex::new(TransactionStatus::Open)),
             hasher: Arc::new(Mutex::new(hasher)),
             auto_rollback,
@@ -61,20 +67,20 @@ impl Transaction {
         )
     }
 
-    pub async fn commit(&self) -> QLDBResult<()> {
+    pub async fn commit(&self) -> QldbResult<()> {
         use TransactionStatus::*;
 
-        let mut is_completed = self.completed.lock().await;
+        let is_completed = self.completed.lock().await;
 
         match *is_completed {
             Commit => return Ok(()),
-            Rollback => return Err(QLDBError::TransactionAlreadyRollback),
+            Rollback => return Err(QldbError::TransactionAlreadyRollback),
             Open => {
                 let commit_digest = self.hasher.lock().await.get().to_owned();
 
                 self.client
                     .send_command(create_commit_command(
-                        &self.session,
+                        self.session.get_session_id(),
                         &self.transaction_id,
                         &commit_digest,
                     ))
@@ -82,7 +88,7 @@ impl Transaction {
             }
         }
 
-        *is_completed = Commit;
+        self.complete(is_completed, Commit);
 
         // TODO: Check the returned CommitDigest with the
         // current hash and fail if they are not equal.
@@ -90,10 +96,10 @@ impl Transaction {
         Ok(())
     }
 
-    pub(crate) async fn silent_commit(&self) -> QLDBResult<()> {
+    pub(crate) async fn silent_commit(&self) -> QldbResult<()> {
         match self.commit().await {
             Ok(_) => Ok(()),
-            Err(QLDBError::TransactionAlreadyRollback) => Ok(()),
+            Err(QldbError::TransactionAlreadyRollback) => Ok(()),
             Err(error) => Err(error),
         }
     }
@@ -105,22 +111,22 @@ impl Transaction {
     /// It fails is the transaction is already committed. For
     /// a rollback that doesn't fail when already committed you can
     /// check the `silent_rollback` method.
-    pub async fn rollback(&self) -> QLDBResult<()> {
+    pub async fn rollback(&self) -> QldbResult<()> {
         use TransactionStatus::*;
 
-        let mut is_completed = self.completed.lock().await;
+        let is_completed = self.completed.lock().await;
 
         match *is_completed {
             Rollback => return Ok(()),
-            Commit => return Err(QLDBError::TransactionAlreadyCommitted),
+            Commit => return Err(QldbError::TransactionAlreadyCommitted),
             Open => {
                 self.client
-                    .send_command(create_rollback_command(&self.session))
+                    .send_command(create_rollback_command(self.session.get_session_id()))
                     .await?;
             }
         }
 
-        *is_completed = Rollback;
+        self.complete(is_completed, Rollback);
 
         Ok(())
     }
@@ -133,10 +139,10 @@ impl Transaction {
     /// Once rollback is called the
     /// transaction becomes invalid. Subsequent calls to rollback or
     /// commit (internally) won't have any effect.
-    pub async fn silent_rollback(&self) -> QLDBResult<()> {
+    pub async fn silent_rollback(&self) -> QldbResult<()> {
         match self.rollback().await {
             Ok(_) => Ok(()),
-            Err(QLDBError::TransactionAlreadyCommitted) => Ok(()),
+            Err(QldbError::TransactionAlreadyCommitted) => Ok(()),
             Err(error) => Err(error),
         }
     }
@@ -150,6 +156,16 @@ impl Transaction {
             Commit | Rollback => true,
             Open => false,
         }
+    }
+
+    fn complete(
+        &self,
+        mut is_completed: MutexGuard<'_, TransactionStatus>,
+        status: TransactionStatus,
+    ) {
+        *is_completed = status;
+        // TODO: We maybe shouldn't be ignoring this error
+        let _ = self.session_pool.give_back((*self.session).clone());
     }
 
     pub(crate) async fn hash_query(&self, statement: &str, params: &[IonValue]) {
@@ -169,7 +185,7 @@ impl Transaction {
     async fn get_transaction_id(
         client: &Arc<QldbSessionClient>,
         session: &str,
-    ) -> QLDBResult<String> {
+    ) -> QldbResult<String> {
         let response = client
             .send_command(create_start_transaction_command(session))
             .await?;
@@ -177,16 +193,12 @@ impl Transaction {
         let token = match response.start_transaction {
             Some(session) => match session.transaction_id {
                 Some(token) => token,
-                None => return Err(QLDBError::QLDBReturnedEmptyTransaction),
+                None => return Err(QldbError::QldbReturnedEmptyTransaction),
             },
-            None => return Err(QLDBError::QLDBReturnedEmptyTransaction),
+            None => return Err(QldbError::QldbReturnedEmptyTransaction),
         };
 
         Ok(token)
-    }
-
-    pub(crate) fn get_session(&self) -> &str {
-        &self.session
     }
 }
 

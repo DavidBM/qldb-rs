@@ -1,5 +1,5 @@
 use ion_binary_rs::IonValue;
-use qldb::{Document, DocumentCollection, QLDBExtractError};
+use qldb::{Document, DocumentCollection, QldbExtractError};
 use std::convert::{TryFrom, TryInto};
 
 fn get_qldb_struct() -> IonValue {
@@ -24,7 +24,7 @@ fn check_document() {
 
     let bad_property = "Mode";
     let get_error = document.get_value::<String>(bad_property).unwrap_err();
-    if let QLDBExtractError::MissingProperty(error_str) = get_error {
+    if let QldbExtractError::MissingProperty(error_str) = get_error {
         assert_eq!(bad_property, error_str);
     } else {
         panic!()

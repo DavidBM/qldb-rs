@@ -1,4 +1,4 @@
-use crate::{document::Document, types::QLDBExtractError};
+use crate::{document::Document, types::QldbExtractError};
 use ion_binary_rs::IonValue;
 use std::convert::TryFrom;
 use std::ops::Index;
@@ -18,11 +18,11 @@ use std::ops::Index;
 ///
 /// ```rust,no_run
 ///
-/// use qldb::{DocumentCollection, QLDBExtractResult};
+/// use qldb::{DocumentCollection, QldbExtractResult};
 ///
 /// // Adds all the "points" attributes from each document.
 /// // It stops early in case of error extracting the attribute.
-/// fn count_points(matches: DocumentCollection) -> QLDBExtractResult<u64> {
+/// fn count_points(matches: DocumentCollection) -> QldbExtractResult<u64> {
 ///
 ///     // You can use other types as BigUInt, BigDecimal, etc
 ///     // in order to avoid overflow
@@ -43,7 +43,7 @@ pub struct DocumentCollection {
 }
 
 impl TryFrom<Vec<IonValue>> for DocumentCollection {
-    type Error = QLDBExtractError;
+    type Error = QldbExtractError;
 
     fn try_from(ion_values_vector: Vec<IonValue>) -> Result<Self, Self::Error> {
         let mut documents_vector: Vec<Document> = Vec::new();
@@ -66,12 +66,16 @@ impl DocumentCollection {
         self.documents
     }
 
-    pub fn to_vec(self) -> Vec<Document> {
+    pub fn into_vec(self) -> Vec<Document> {
         self.into_inner()
     }
 
-    pub fn len(self) -> usize {
+    pub fn len(&self) -> usize {
         self.documents.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -83,7 +87,7 @@ impl Default for DocumentCollection {
 
 impl From<DocumentCollection> for Vec<Document> {
     fn from(docs: DocumentCollection) -> Self {
-        docs.to_vec()
+        docs.into_vec()
     }
 }
 
