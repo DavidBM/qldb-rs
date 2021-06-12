@@ -58,10 +58,7 @@ pub async fn create_type_test<F: FnOnce(HashMap<String, IonValue>)>(
 pub async fn ensure_test_table(client: &QldbClient) -> String {
     let result = client
         .transaction_within(|client| async move {
-            let _ = client
-                .query("CREATE TABLE QldbLibRsTest")
-                .execute()
-                .await?;
+            let _ = client.query("CREATE TABLE QldbLibRsTest").execute().await?;
 
             Ok(())
         })
