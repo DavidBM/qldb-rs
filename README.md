@@ -13,13 +13,13 @@ We are using it internally, so we will keep it updated.
 ## Example
 
 ```rust,no_run
-use qldb::QLDBClient;
+use qldb::QldbClient;
 use std::collections::HashMap;
 
-let client = QLDBClient::default("rust-crate-test").await?;
+let client = QldbClient::default("rust-crate-test", 200).await?;
 
 let mut value_to_insert = HashMap::new();
-// This will insert a document with a key "test_column" 
+// This will insert a documents with a key "test_column"
 // with the value "IonValue::String(test_value)"
 value_to_insert.insert("test_column", "test_value");
 
@@ -34,6 +34,14 @@ client
     })
     .await?;
 ```
+
+# Session Pool
+
+The driver has a session pool. The second parameter in the
+QldbClient::default is the maximun size of the connection pool.
+
+The pool will be auto-populated as parallel transaction are being 
+requested until it reaches the provided maximum. 
 
 # Test
 

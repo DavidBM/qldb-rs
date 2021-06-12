@@ -42,6 +42,9 @@
 //! The driver has a session pool. The second parameter in the
 //! QldbClient::default is the maximun size of the connection pool.
 //!
+//! The pool will be auto-populated as parallel transaction are being
+//! requested until it reaches the provided maximum.
+//!
 //! # Test
 //!
 //! For tests you will need to have some AWS credentials in your
