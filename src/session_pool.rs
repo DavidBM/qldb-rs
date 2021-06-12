@@ -209,7 +209,10 @@ async fn create_session(
             Ok(session) => break Ok(session),
             Err(error) if tries > 10 => break Err(error),
             Err(GetSessionError::Recoverable(_)) => {
-                Timer::after(Duration::from_millis(tries.pow(tries * 10).into())).await;
+                Timer::after(Duration::from_millis(
+                    tries.saturating_mul(tries).saturating_mul(75).into(),
+                ))
+                .await;
             }
             Err(GetSessionError::Unrecoverable(error)) => {
                 break Err(GetSessionError::Unrecoverable(error))
@@ -264,10 +267,7 @@ async fn qldb_request_session(
     }
 }
 
-async fn close_session(
-    qldb_client: &Arc<QldbSessionClient>,
-    session: &Session,
-) {
+async fn close_session(qldb_client: &Arc<QldbSessionClient>, session: &Session) {
     let mut tries: u32 = 0;
 
     let _ = loop {
@@ -277,7 +277,10 @@ async fn close_session(
             Ok(_) => break,
             Err(_) if tries > 10 => break,
             Err(_) => {
-                Timer::after(Duration::from_millis(tries.pow(tries * 10).into())).await;
+                Timer::after(Duration::from_millis(
+                    tries.saturating_mul(tries).saturating_mul(75).into(),
+                ))
+                .await;
             }
         }
     };
