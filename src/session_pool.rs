@@ -2,13 +2,18 @@ use async_channel::{bounded, unbounded, RecvError, Sender, TrySendError};
 use async_compat::CompatExt;
 use async_executor::LocalExecutor;
 use async_io::Timer;
+use async_lock::Mutex;
 use futures_lite::future;
 use rusoto_core::RusotoError;
 use rusoto_qldb_session::{
     EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest,
 };
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::rc::Rc;
+use std::sync::{
+    atomic::{AtomicU16, Ordering::Relaxed},
+    Arc,
+};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
@@ -73,107 +78,118 @@ impl SessionPool {
         max_sessions: u16,
     ) -> SessionPool {
         let (sender, receiver) = unbounded::<PoolCommand>();
-
-        let sender_delayed = sender.clone();
         let ledger_name = ledger_name.to_owned();
 
         std::thread::spawn(move || {
             let executor = LocalExecutor::new();
+            let sessions = Rc::new(Mutex::new(VecDeque::<Session>::new()));
+            let session_requests = Rc::new(Mutex::new(VecDeque::<Sender<Session>>::new()));
+            let active_session_count = Rc::new(AtomicU16::new(0));
+            let (session_create_request, session_create_recv) = unbounded::<()>();
 
-            let task =
-                executor.spawn(async move {
-                    let mut sessions = VecDeque::<Session>::new();
-                    let mut session_requests = VecDeque::<Sender<Session>>::new();
-                    let mut active_session_count: u16 = 0;
+            {
+                let sessions = sessions.clone();
+                let session_requests = session_requests.clone();
+                let active_session_count = active_session_count.clone();
+                let qldb_client = qldb_client.clone();
+                let session_create_request = session_create_request.clone();
 
-                    'queue_recv: loop {
-                        match receiver.recv().await {
-                            Ok(PoolCommand::Return(session)) => {
-                                if !session.is_valid() {
-                                    close_session(&qldb_client, &session).await;
-                                    active_session_count = active_session_count.saturating_sub(1);
-                                    continue;
-                                }
+                executor
+                    .spawn(async move {
+                        while let Ok(message) = receiver.recv().await {
+                            match message {
+                                PoolCommand::Return(session) => {
+                                    if !session.is_valid() {
+                                        close_session(
+                                            &qldb_client,
+                                            &session,
+                                            &active_session_count,
+                                        )
+                                        .await;
 
-                                if let Some(sender) = session_requests.pop_back() {
-                                    if sender.try_send(session).is_err() {
-                                        break;
+                                        continue;
                                     }
-                                } else {
-                                    sessions.push_front(session);
+
+                                    sessions.lock().await.push_front(session);
+
+                                    try_send_session_to_session_requesters(
+                                        &sessions,
+                                        &session_requests,
+                                    )
+                                    .await;
                                 }
-                            }
-                            Ok(PoolCommand::Request(sender)) => 'session_pop: loop {
-                                match sessions.pop_back() {
-                                    Some(session) => {
-                                        if !session.is_valid() {
-                                            close_session(&qldb_client, &session).await;
-                                            continue 'session_pop;
-                                        }
+                                PoolCommand::Request(sender) => loop {
+                                    let session = sessions.lock().await.pop_back();
 
-                                        if let Err(error) = sender.try_send(session) {
-                                            let session = match error {
-                                                TrySendError::Full(session) => session,
-                                                TrySendError::Closed(session) => session,
-                                            };
+                                    match session {
+                                        Some(session) => {
+                                            if !session.is_valid() {
+                                                close_session(
+                                                    &qldb_client,
+                                                    &session,
+                                                    &active_session_count,
+                                                )
+                                                .await;
 
-                                            sessions.push_front(session);
-
-                                            break 'session_pop;
-                                        }
-
-                                        break 'session_pop;
-                                    }
-                                    None => {
-                                        if active_session_count < max_sessions {
-                                            let session =
-                                                match create_session(&qldb_client, &ledger_name)
-                                                    .await
-                                                {
-                                                    Ok(session) => session,
-                                                    Err(_) => {
-                                                        // If it isn't possible to get a connection, we
-                                                        // enqueue the request again hoping for it to be
-                                                        // processed later successfully.
-                                                        if sender_delayed
-                                                            .try_send(PoolCommand::Request(sender))
-                                                            .is_err()
-                                                        {
-                                                            break 'queue_recv;
-                                                        } else {
-                                                            break 'session_pop;
-                                                        }
-                                                    }
-                                                };
-
-                                            active_session_count =
-                                                active_session_count.saturating_add(1);
-
-                                            if let Err(error) = sender.try_send(session) {
-                                                let session = match error {
-                                                    TrySendError::Full(session) => session,
-                                                    TrySendError::Closed(session) => session,
-                                                };
-
-                                                sessions.push_front(session);
+                                                continue;
                                             }
 
-                                            break 'session_pop;
-                                        } else {
-                                            session_requests.push_front(sender);
-                                            break 'session_pop;
+                                            try_send_session(&sender, session, &sessions).await;
+                                        }
+                                        None => {
+                                            session_requests.lock().await.push_front(sender);
+                                            let _ = session_create_request.send(()).await;
                                         }
                                     }
-                                }
-                            },
-                            Err(_) => {
-                                break;
+
+                                    break;
+                                },
                             }
                         }
-                    }
-                });
+                    })
+                    .detach();
+            }
 
-            future::block_on(executor.run(task));
+            {
+                let sessions = sessions;
+                let session_requests = session_requests;
+                let active_session_count = active_session_count;
+
+                executor
+                    .spawn(async move {
+                        while session_create_recv.recv().await.is_ok() {
+                            if active_session_count.load(Relaxed) >= max_sessions {
+                                continue;
+                            }
+
+                            match create_session(&qldb_client, &ledger_name).await {
+                                Ok(session) => {
+                                    add_session(&active_session_count, &sessions, session).await;
+
+                                    try_send_session_to_session_requesters(
+                                        &sessions,
+                                        &session_requests,
+                                    )
+                                    .await;
+
+                                    if active_session_count.load(Relaxed) < max_sessions
+                                        && !session_requests.lock().await.is_empty()
+                                    {
+                                        let _ = session_create_request.send(()).await;
+                                    }
+                                }
+                                Err(_) => {
+                                    Timer::after(Duration::from_millis(100)).await;
+
+                                    let _ = session_create_request.send(()).await;
+                                }
+                            };
+                        }
+                    })
+                    .detach();
+            }
+
+            future::block_on(executor.run(future::pending::<()>()));
         });
 
         SessionPool { sender }
@@ -248,17 +264,13 @@ async fn qldb_request_session(
         Ok(response) => match response.start_session {
             Some(session) => match session.session_token {
                 Some(token) => Ok(token),
-                None => {
-                    return Err(GetSessionError::Unrecoverable(eyre::eyre!(
-                        "No session present on QLDB response"
-                    )))
-                }
+                None => Err(GetSessionError::Unrecoverable(eyre::eyre!(
+                    "No session present on QLDB response"
+                ))),
             },
-            None => {
-                return Err(GetSessionError::Unrecoverable(eyre::eyre!(
-                    "Empty session on QLDB response"
-                )))
-            }
+            None => Err(GetSessionError::Unrecoverable(eyre::eyre!(
+                "Empty session on QLDB response"
+            ))),
         },
         Err(err) => match err {
             RusotoError::Credentials(_) => Err(GetSessionError::Unrecoverable(eyre::eyre!(err))),
@@ -267,10 +279,14 @@ async fn qldb_request_session(
     }
 }
 
-async fn close_session(qldb_client: &Arc<QldbSessionClient>, session: &Session) {
+async fn close_session(
+    qldb_client: &Arc<QldbSessionClient>,
+    session: &Session,
+    active_session_count: &Rc<AtomicU16>,
+) {
     let mut tries: u32 = 0;
 
-    let _ = loop {
+    loop {
         tries = tries.saturating_add(1);
 
         match qldb_close_session(qldb_client, session).await {
@@ -283,7 +299,12 @@ async fn close_session(qldb_client: &Arc<QldbSessionClient>, session: &Session) 
                 .await;
             }
         }
-    };
+    }
+
+    active_session_count.store(
+        active_session_count.load(Relaxed).saturating_sub(1),
+        Relaxed,
+    );
 }
 
 async fn qldb_close_session(
@@ -299,4 +320,65 @@ async fn qldb_close_session(
         .await?;
 
     Ok(())
+}
+
+fn get_session_from_send_err(error: TrySendError<Session>) -> Session {
+    match error {
+        TrySendError::Full(session) => session,
+        TrySendError::Closed(session) => session,
+    }
+}
+
+async fn try_send_session_to_session_requesters(
+    sessions: &Rc<Mutex<VecDeque<Session>>>,
+    session_requests: &Rc<Mutex<VecDeque<Sender<Session>>>>,
+) {
+    let session = loop {
+        let session = sessions.lock().await.pop_back();
+
+        match session {
+            None => break None,
+            Some(session) => {
+                if let Some(sender) = session_requests.lock().await.pop_back() {
+                    if let Err(error) = sender.try_send(session) {
+                        let session = get_session_from_send_err(error);
+
+                        sessions.lock().await.push_front(session);
+
+                        continue;
+                    }
+                } else {
+                    break Some(session);
+                }
+            }
+        }
+    };
+
+    if let Some(session) = session {
+        sessions.lock().await.push_front(session);
+    }
+}
+
+async fn try_send_session(
+    sender: &Sender<Session>,
+    session: Session,
+    sessions: &Rc<Mutex<VecDeque<Session>>>,
+) {
+    if let Err(error) = sender.try_send(session) {
+        let session = get_session_from_send_err(error);
+
+        sessions.lock().await.push_front(session);
+    }
+}
+
+async fn add_session(
+    active_session_count: &Rc<AtomicU16>,
+    sessions: &Rc<Mutex<VecDeque<Session>>>,
+    session: Session,
+) {
+    active_session_count.store(
+        active_session_count.load(Relaxed).saturating_add(1),
+        Relaxed,
+    );
+    sessions.lock().await.push_front(session);
 }
