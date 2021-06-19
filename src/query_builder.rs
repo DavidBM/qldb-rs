@@ -113,7 +113,7 @@ impl QueryBuilder {
         // with the waiting of the send_command.
         self.tx.hash_query(&self.statement, &self.params).await;
 
-        let params = std::mem::replace(&mut self.params, vec![]);
+        let params = std::mem::take(&mut self.params);
 
         self.is_executed.store(true, Relaxed);
 
