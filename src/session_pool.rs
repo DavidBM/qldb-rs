@@ -1,19 +1,22 @@
-use async_channel::{bounded, unbounded, RecvError, Sender, TrySendError};
+use async_channel::{bounded, unbounded, Sender, TrySendError};
 use async_compat::CompatExt;
 use async_executor::LocalExecutor;
 use async_io::Timer;
 use async_lock::Mutex;
+use eyre::WrapErr;
 use futures_lite::future;
 use rusoto_core::RusotoError;
 use rusoto_qldb_session::{
     EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest,
 };
 use std::collections::VecDeque;
+use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::{
     atomic::{AtomicU16, Ordering::Relaxed},
     Arc,
 };
+use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
@@ -46,20 +49,6 @@ impl Session {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum SessionRequestError {
-    #[error("Cannot request a session. {0}")]
-    SendError(#[from] TrySendError<PoolCommand>),
-    #[error("Cannot receive a session after a successful request. {0}")]
-    RecvError(#[from] RecvError),
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum SessionReturnError {
-    #[error("Cannot return a session. {0}")]
-    SendError(#[from] TrySendError<PoolCommand>),
-}
-
 #[derive(Debug)]
 pub enum PoolCommand {
     Request(Sender<Session>),
@@ -69,6 +58,7 @@ pub enum PoolCommand {
 #[derive(Debug, Clone)]
 pub struct SessionPool {
     sender: Sender<PoolCommand>,
+    closer: Arc<Mutex<Option<PoolEndFuture>>>,
 }
 
 impl SessionPool {
@@ -79,6 +69,9 @@ impl SessionPool {
     ) -> SessionPool {
         let (sender, receiver) = unbounded::<PoolCommand>();
         let ledger_name = ledger_name.to_owned();
+
+        let closer = PoolEndFuture::new();
+        let closer_executor = PoolEndFuture::new();
 
         std::thread::spawn(move || {
             let executor = LocalExecutor::new();
@@ -189,26 +182,35 @@ impl SessionPool {
                     .detach();
             }
 
-            future::block_on(executor.run(future::pending::<()>()));
+            future::block_on(executor.run(closer_executor));
         });
 
-        SessionPool { sender }
+        SessionPool {
+            sender,
+            closer: Arc::new(Mutex::new(Some(closer))),
+        }
     }
 
-    pub async fn get(&self) -> Result<Session, SessionRequestError> {
+    pub async fn close(&self) {
+        if let Some(closer) = self.closer.lock().await.take() {
+            closer.close();
+        }
+    }
+
+    pub async fn get(&self) -> eyre::Result<Session> {
         let (sender, receiver) = bounded::<Session>(1);
 
-        self.sender.try_send(PoolCommand::Request(sender))?;
+        self.sender
+            .try_send(PoolCommand::Request(sender))
+            .wrap_err("Session pool closed")?;
 
-        let session = receiver.recv().await?;
+        let session = receiver.recv().await.wrap_err("Session pool closed")?;
 
         Ok(session)
     }
 
-    pub fn give_back(&self, session: Session) -> Result<(), SessionReturnError> {
-        self.sender.try_send(PoolCommand::Return(session))?;
-
-        Ok(())
+    pub fn give_back(&self, session: Session) {
+        let _ = self.sender.try_send(PoolCommand::Return(session));
     }
 }
 
@@ -381,4 +383,39 @@ async fn add_session(
         Relaxed,
     );
     sessions.lock().await.push_front(session);
+}
+
+#[derive(Debug, Clone)]
+struct PoolEndFuture {
+    waker: Option<Waker>,
+    ready: bool,
+}
+
+impl PoolEndFuture {
+    fn new() -> PoolEndFuture {
+        PoolEndFuture {
+            waker: None,
+            ready: false,
+        }
+    }
+
+    fn close(mut self) {
+        self.ready = true;
+
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+    }
+}
+
+impl std::future::Future for PoolEndFuture {
+    type Output = ();
+    fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.ready {
+            Poll::Ready(())
+        } else {
+            self.waker = Some(context.waker().clone());
+            Poll::Pending
+        }
+    }
 }

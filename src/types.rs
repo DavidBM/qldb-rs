@@ -1,4 +1,4 @@
-use crate::session_pool::SessionRequestError;
+use eyre::Report;
 use ion_binary_rs::IonParserError;
 use rusoto_core::{request::TlsError, RusotoError};
 use rusoto_qldb_session::SendCommandError;
@@ -32,8 +32,8 @@ pub enum QldbError {
     QueryAlreadyExecuted,
     #[error("Error extranting the QLDB returned Ion values to the requested type.")]
     QldbExtractError(#[from] QldbExtractError),
-    #[error("Cannot get session from session pool.")]
-    SessionPool(#[from] SessionRequestError),
+    #[error("Cannot get session from session pool. This means that the session pool was closed by calling the `.close()` method.")]
+    SessionPoolClosed(Report),
 }
 
 pub type QldbResult<T> = Result<T, QldbError>;

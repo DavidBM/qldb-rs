@@ -1,4 +1,4 @@
-use crate::{session_pool::SessionPool, QldbResult, QueryBuilder, Transaction};
+use crate::{session_pool::SessionPool, QldbError, QldbResult, QueryBuilder, Transaction};
 use rusoto_core::{credential::ChainProvider, request::HttpClient, Region};
 use rusoto_qldb_session::QldbSessionClient;
 use std::future::Future;
@@ -79,7 +79,11 @@ impl QldbClient {
     /// directly. If not, you may be better off using the method
     /// `transaction_within`.
     pub async fn transaction(&self) -> QldbResult<Transaction> {
-        let session = self.session_pool.get().await?;
+        let session = self
+            .session_pool
+            .get()
+            .await
+            .map_err(QldbError::SessionPoolClosed)?;
 
         Ok(Transaction::new(
             self.client.clone(),
@@ -91,7 +95,11 @@ impl QldbClient {
     }
 
     pub(crate) async fn auto_rollback_transaction(&self) -> QldbResult<Transaction> {
-        let session = self.session_pool.get().await?;
+        let session = self
+            .session_pool
+            .get()
+            .await
+            .map_err(QldbError::SessionPoolClosed)?;
 
         Ok(Transaction::new(
             self.client.clone(),
@@ -100,6 +108,16 @@ impl QldbClient {
             true,
         )
         .await?)
+    }
+
+    /// It closes the session pool. Current transaction which already have a
+    /// session can work as normal, but new transaction (requiring a new session
+    /// id) will return error.
+    ///
+    /// Call this method only when you are sure that all important work is
+    /// already commited to QLDB.
+    pub async fn close(&mut self) {
+        self.session_pool.close().await;
     }
 
     /// It call the closure providing an already made transaction. Once the
