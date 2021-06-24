@@ -10,13 +10,12 @@ use rusoto_qldb_session::{
     EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest,
 };
 use std::collections::VecDeque;
-use std::pin::Pin;
 use std::rc::Rc;
+use std::sync::atomic::AtomicBool;
 use std::sync::{
     atomic::{AtomicU16, Ordering::Relaxed},
     Arc,
 };
-use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
@@ -58,7 +57,7 @@ pub enum PoolCommand {
 #[derive(Debug, Clone)]
 pub struct SessionPool {
     sender: Sender<PoolCommand>,
-    closer: Arc<Mutex<Option<PoolEndFuture>>>,
+    is_closed: Arc<AtomicBool>,
 }
 
 impl SessionPool {
@@ -70,8 +69,9 @@ impl SessionPool {
         let (sender, receiver) = unbounded::<PoolCommand>();
         let ledger_name = ledger_name.to_owned();
 
-        let closer = PoolEndFuture::new();
-        let closer_executor = PoolEndFuture::new();
+        let is_closed = Arc::new(AtomicBool::from(false));
+
+        let is_closed_for_thread = is_closed.clone();
 
         std::thread::spawn(move || {
             let executor = LocalExecutor::new();
@@ -86,10 +86,15 @@ impl SessionPool {
                 let active_session_count = active_session_count.clone();
                 let qldb_client = qldb_client.clone();
                 let session_create_request = session_create_request.clone();
+                let is_closed = is_closed_for_thread.clone();
 
                 executor
                     .spawn(async move {
                         while let Ok(message) = receiver.recv().await {
+                            if is_closed.load(Relaxed) {
+                                break;
+                            }
+
                             match message {
                                 PoolCommand::Return(session) => {
                                     if !session.is_valid() {
@@ -147,12 +152,17 @@ impl SessionPool {
                 let sessions = sessions;
                 let session_requests = session_requests;
                 let active_session_count = active_session_count;
+                let is_closed = is_closed_for_thread.clone();
 
                 executor
                     .spawn(async move {
                         while session_create_recv.recv().await.is_ok() {
                             if active_session_count.load(Relaxed) >= max_sessions {
                                 continue;
+                            }
+
+                            if is_closed.load(Relaxed) {
+                                break;
                             }
 
                             match create_session(&qldb_client, &ledger_name).await {
@@ -182,19 +192,14 @@ impl SessionPool {
                     .detach();
             }
 
-            future::block_on(executor.run(closer_executor));
+            future::block_on(executor.run(future::pending::<()>()));
         });
 
-        SessionPool {
-            sender,
-            closer: Arc::new(Mutex::new(Some(closer))),
-        }
+        SessionPool { sender, is_closed }
     }
 
     pub async fn close(&self) {
-        if let Some(closer) = self.closer.lock().await.take() {
-            closer.close();
-        }
+        self.is_closed.store(true, Relaxed);
     }
 
     pub async fn get(&self) -> eyre::Result<Session> {
@@ -383,39 +388,4 @@ async fn add_session(
         Relaxed,
     );
     sessions.lock().await.push_front(session);
-}
-
-#[derive(Debug, Clone)]
-struct PoolEndFuture {
-    waker: Option<Waker>,
-    ready: bool,
-}
-
-impl PoolEndFuture {
-    fn new() -> PoolEndFuture {
-        PoolEndFuture {
-            waker: None,
-            ready: false,
-        }
-    }
-
-    fn close(mut self) {
-        self.ready = true;
-
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
-    }
-}
-
-impl std::future::Future for PoolEndFuture {
-    type Output = ();
-    fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.ready {
-            Poll::Ready(())
-        } else {
-            self.waker = Some(context.waker().clone());
-            Poll::Pending
-        }
-    }
 }
