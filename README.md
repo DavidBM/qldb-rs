@@ -6,6 +6,8 @@ Driver for Amazon's QLDB Database implemented in pure rust.
 
 [![Documentation](https://docs.rs/qldb/badge.svg)](https://docs.rs/qldb)
 [![Crates.io](https://img.shields.io/crates/v/qldb)](https://crates.io/crates/qldb)
+[![Coverage Status](https://coveralls.io/repos/github/Couragium/qldb/badge.svg?branch=master)](https://coveralls.io/github/Couragium/qldb?branch=master)
+[![Buils Status](https://github.com/Couragium/qldb/workflows/Rust/badge.svg)](https://github.com/Couragium/qldb/actions)
 
 The driver is fairly tested and should be ready to test in real projects.
 We are using it internally, so we will keep it updated.
@@ -40,8 +42,8 @@ client
 The driver has a session pool. The second parameter in the
 QldbClient::default is the maximun size of the connection pool.
 
-The pool will be auto-populated as parallel transaction are being 
-requested until it reaches the provided maximum. 
+The pool will be auto-populated as parallel transaction are being
+requested until it reaches the provided maximum.
 
 # Test
 
