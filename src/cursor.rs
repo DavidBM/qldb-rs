@@ -81,7 +81,7 @@ impl Cursor {
         let (values, next_page_token) = if self.is_first_page {
             self.query_builder.execute_statement().await?
         } else if let Some(page) = &self.next_page {
-            self.query_builder.execute_get_page(&page).await?
+            self.query_builder.execute_get_page(page).await?
         } else {
             self.is_first_page = false;
             return Ok(None);

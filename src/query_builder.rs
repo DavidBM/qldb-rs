@@ -167,7 +167,7 @@ impl QueryBuilder {
         let result = self.execute().await?;
 
         match result.into_inner().last() {
-            Some(ref doc) => match doc.get("_1") {
+            Some(doc) => match doc.get("_1") {
                 Some(IonValue::Integer(count)) => Ok(*count),
                 _ => Err(QldbError::NonValidCountStatementResult),
             },

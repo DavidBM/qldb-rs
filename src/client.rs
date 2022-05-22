@@ -11,7 +11,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct QldbClient {
     client: Arc<QldbSessionClient>,
-    ledger_name: String,
+    _ledger_name: String,
     session_pool: Arc<SessionPool>,
 }
 
@@ -51,7 +51,7 @@ impl QldbClient {
 
         Ok(QldbClient {
             client,
-            ledger_name: ledger_name.to_string(),
+            _ledger_name: ledger_name.to_string(),
             session_pool,
         })
     }
@@ -85,13 +85,13 @@ impl QldbClient {
             .await
             .map_err(QldbError::SessionPoolClosed)?;
 
-        Ok(Transaction::new(
+        Transaction::new(
             self.client.clone(),
             self.session_pool.clone(),
             session,
             false,
         )
-        .await?)
+        .await
     }
 
     pub(crate) async fn auto_rollback_transaction(&self) -> QldbResult<Transaction> {
@@ -101,13 +101,13 @@ impl QldbClient {
             .await
             .map_err(QldbError::SessionPoolClosed)?;
 
-        Ok(Transaction::new(
+        Transaction::new(
             self.client.clone(),
             self.session_pool.clone(),
             session,
             true,
         )
-        .await?)
+        .await
     }
 
     /// It closes the session pool. Current transaction which already have a
