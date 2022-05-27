@@ -4,7 +4,6 @@ use async_executor::LocalExecutor;
 use async_io::Timer;
 use async_lock::Mutex;
 use eyre::WrapErr;
-use futures_lite::future;
 use rusoto_core::RusotoError;
 use rusoto_qldb_session::{
     EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest,
@@ -192,7 +191,7 @@ impl SessionPool {
                     .detach();
             }
 
-            future::block_on(executor.run(future::pending::<()>()));
+            futures::executor::block_on(executor.run(futures::future::pending::<()>()));
         });
 
         SessionPool { sender, is_closed }
