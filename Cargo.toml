@@ -1,6 +1,6 @@
 [package]
 name = "qldb"
-version = "3.0.4"
+version = "3.1.0"
 authors = ["Couragium Solutions <info@couragium.com>"]
 edition = "2018"
 
@@ -32,7 +32,7 @@ async-lock = "2.5"
 log = "0.4"
 
 [dev-dependencies]
-chrono = "0.4.19"
-async-std = { version = "1.9.0", features = ["attributes", "tokio1"] }
-bigdecimal = "0.2.0"
-rand = "0.8.4"
+chrono = "0.4"
+async-std = { version = "1", features = ["attributes", "tokio1"] }
+bigdecimal = "0.3"
+rand = "0.8"
