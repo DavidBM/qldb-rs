@@ -29,6 +29,7 @@ async-io = "1.7"
 eyre = "0.6"
 async-compat = "0.2"
 async-lock = "2.5"
+log = "0.4"
 
 [dev-dependencies]
 chrono = "0.4.19"

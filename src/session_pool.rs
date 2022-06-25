@@ -1,13 +1,12 @@
-use async_channel::{bounded, unbounded, Sender, TrySendError};
+use async_channel::{bounded, unbounded, Sender};
 use async_compat::CompatExt;
 use async_executor::LocalExecutor;
 use async_io::Timer;
-use async_lock::Mutex;
 use eyre::WrapErr;
+use log::error;
 use rusoto_core::RusotoError;
-use rusoto_qldb_session::{
-    EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest,
-};
+use rusoto_qldb_session::{EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest};
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
@@ -47,154 +46,233 @@ impl Session {
     }
 }
 
-#[derive(Debug)]
-pub enum PoolCommand {
-    Request(Sender<Session>),
-    Return(Session),
-}
-
 #[derive(Debug, Clone)]
 pub struct SessionPool {
-    sender: Sender<PoolCommand>,
+    sender_request: Sender<Sender<Session>>,
+    sender_return: Sender<Session>,
     is_closed: Arc<AtomicBool>,
 }
 
 impl SessionPool {
-    pub fn new(
-        qldb_client: Arc<QldbSessionClient>,
-        ledger_name: &str,
-        max_sessions: u16,
-    ) -> SessionPool {
-        let (sender, receiver) = unbounded::<PoolCommand>();
+    pub fn new(qldb_client: Arc<QldbSessionClient>, ledger_name: &str, max_sessions: u16) -> SessionPool {
+        let (requesting_sender, requesting_receiver) = unbounded::<Sender<Session>>();
+        let (returning_sender, returning_receiver) = unbounded::<Session>();
         let ledger_name = ledger_name.to_owned();
 
         let is_closed = Arc::new(AtomicBool::from(false));
 
-        let is_closed_for_thread = is_closed.clone();
+        let is_closed_return = is_closed.clone();
+        let requesting_sender_return = requesting_sender.clone();
 
         std::thread::spawn(move || {
-            let executor = LocalExecutor::new();
-            let sessions = Rc::new(Mutex::new(VecDeque::<Session>::new()));
-            let session_requests = Rc::new(Mutex::new(VecDeque::<Sender<Session>>::new()));
-            let active_session_count = Rc::new(AtomicU16::new(0));
-            let (session_create_request, session_create_recv) = unbounded::<()>();
+            let executor = Rc::new(LocalExecutor::new());
+            let sessions = Rc::new(RefCell::new(VecDeque::<Session>::with_capacity(max_sessions.into())));
+            let session_count = Rc::new(AtomicU16::new(0));
 
-            {
-                let sessions = sessions.clone();
-                let session_requests = session_requests.clone();
-                let active_session_count = active_session_count.clone();
-                let qldb_client = qldb_client.clone();
-                let session_create_request = session_create_request.clone();
-                let is_closed = is_closed_for_thread.clone();
+            executor
+                .spawn({
+                    let executor = executor.clone();
+                    let is_closed = is_closed.clone();
+                    let qldb_client = qldb_client.clone();
+                    let sessions = sessions.clone();
+                    let session_count = session_count.clone();
+                    let max_sessions = max_sessions;
 
-                executor
-                    .spawn(async move {
-                        while let Ok(message) = receiver.recv().await {
+                    async move {
+                        while let Ok(sender) = requesting_receiver.recv().await {
                             if is_closed.load(Relaxed) {
                                 break;
                             }
 
-                            match message {
-                                PoolCommand::Return(session) => {
-                                    if !session.is_valid() {
-                                        close_session(
-                                            &qldb_client,
-                                            &session,
-                                            &active_session_count,
-                                        )
-                                        .await;
+                            loop {
+                                let (session, pooled_sessions_count) =
+                                    if let Ok(mut sessions) = sessions.try_borrow_mut() {
+                                        (sessions.pop_back(), sessions.len())
+                                    } else {
+                                        // Should never happens as the executor is single thread and
+                                        // the sessions should never be borrowed at the same time
+                                        requeue_session_request(&requesting_sender, sender);
+                                        break;
+                                    };
 
+                                if let Some(session) = session {
+                                    if session.is_valid() {
+                                        provide_session(&sender, session);
+                                        break;
+                                    } else {
+                                        close_session(&executor, &qldb_client, session, &session_count);
+                                        // Continue so we try next available session
                                         continue;
                                     }
-
-                                    sessions.lock().await.push_front(session);
-
-                                    try_send_session_to_session_requesters(
-                                        &sessions,
-                                        &session_requests,
-                                    )
-                                    .await;
+                                } else {
+                                    if pooled_sessions_count < max_sessions.into() {
+                                        refill_session(&qldb_client.clone(), &ledger_name, &sessions).await;
+                                        continue;
+                                    } else {
+                                        requeue_session_request(&requesting_sender, sender);
+                                    }
+                                    break;
                                 }
-                                PoolCommand::Request(sender) => loop {
-                                    let session = sessions.lock().await.pop_back();
+                            }
+                        }
+                    }
+                })
+                .detach();
 
-                                    match session {
-                                        Some(session) => {
+            executor
+                .spawn({
+                    let executor = executor.clone();
+                    let sessions = sessions;
+                    let session_count = session_count;
+                    let is_closed = is_closed.clone();
+                    let qldb_client = qldb_client.clone();
+                    async move {
+                        while let Ok(session) = returning_receiver.recv().await {
+                            if is_closed.load(Relaxed) {
+                                break;
+                            }
+
+                            if !session.is_valid() {
+                                close_session(&executor, &qldb_client, session, &session_count);
+                            } else if let Ok(mut sessions) = sessions.try_borrow_mut() {
+                                sessions.push_front(session);
+                            } else {
+                                // Should never happens as the executor is single thread and
+                                // the sessions should never be borrowed at the same time
+                                close_session(&executor, &qldb_client, session, &session_count)
+                            }
+                        }
+                    }
+                })
+                .detach();
+
+            futures::executor::block_on(executor.run(futures::future::pending::<()>()));
+        });
+
+        /*        std::thread::spawn(move || {
+                    let session_count = Rc::new(AtomicU16::new(0));
+                    let (session_create_request, session_create_recv) = unbounded::<()>();
+
+                    {
+                        let sessions = sessions.clone();
+                        let session_requests = session_requests.clone();
+                        let session_count = session_count.clone();
+                        let qldb_client = qldb_client.clone();
+                        let session_create_request = session_create_request.clone();
+                        let is_closed = is_closed_for_thread.clone();
+
+                        executor
+                            .spawn(async move {
+                                while let Ok(message) = receiver.recv().await {
+                                    if is_closed.load(Relaxed) {
+                                        break;
+                                    }
+
+                                    match message {
+                                        PoolCommand::Return(session) => {
                                             if !session.is_valid() {
                                                 close_session(
                                                     &qldb_client,
                                                     &session,
-                                                    &active_session_count,
+                                                    &session_count,
                                                 )
                                                 .await;
 
                                                 continue;
                                             }
 
-                                            try_send_session(&sender, session, &sessions).await;
+                                            sessions.lock().await.push_front(session);
+
+                                            try_send_session_to_session_requesters(
+                                                &sessions,
+                                                &session_requests,
+                                            )
+                                            .await;
                                         }
-                                        None => {
-                                            session_requests.lock().await.push_front(sender);
+                                        PoolCommand::Request(sender) => loop {
+                                            let session = sessions.lock().await.pop_back();
+
+                                            match session {
+                                                Some(session) => {
+                                                    if !session.is_valid() {
+                                                        close_session(
+                                                            &qldb_client,
+                                                            &session,
+                                                            &session_count,
+                                                        )
+                                                        .await;
+
+                                                        continue;
+                                                    }
+
+                                                    try_send_session(&sender, session, &sessions).await;
+                                                }
+                                                None => {
+                                                    session_requests.lock().await.push_front(sender);
+                                                    let _ = session_create_request.send(()).await;
+                                                }
+                                            }
+
+                                            break;
+                                        },
+                                    }
+                                }
+                            })
+                            .detach();
+                    }
+
+                    {
+                        let sessions = sessions;
+                        let session_requests = session_requests;
+                        let session_count = session_count;
+                        let is_closed = is_closed_for_thread.clone();
+
+                        executor
+                            .spawn(async move {
+                                while session_create_recv.recv().await.is_ok() {
+                                    if session_count.load(Relaxed) >= max_sessions {
+                                        continue;
+                                    }
+
+                                    if is_closed.load(Relaxed) {
+                                        break;
+                                    }
+
+                                    match create_session(&qldb_client, &ledger_name).await {
+                                        Ok(session) => {
+                                            add_session(&session_count, &sessions, session).await;
+
+                                            try_send_session_to_session_requesters(
+                                                &sessions,
+                                                &session_requests,
+                                            )
+                                            .await;
+
+                                            if session_count.load(Relaxed) < max_sessions
+                                                && !session_requests.lock().await.is_empty()
+                                            {
+                                                let _ = session_create_request.send(()).await;
+                                            }
+                                        }
+                                        Err(_) => {
+                                            Timer::after(Duration::from_millis(100)).await;
+
                                             let _ = session_create_request.send(()).await;
                                         }
-                                    }
-
-                                    break;
-                                },
-                            }
-                        }
-                    })
-                    .detach();
-            }
-
-            {
-                let sessions = sessions;
-                let session_requests = session_requests;
-                let active_session_count = active_session_count;
-                let is_closed = is_closed_for_thread.clone();
-
-                executor
-                    .spawn(async move {
-                        while session_create_recv.recv().await.is_ok() {
-                            if active_session_count.load(Relaxed) >= max_sessions {
-                                continue;
-                            }
-
-                            if is_closed.load(Relaxed) {
-                                break;
-                            }
-
-                            match create_session(&qldb_client, &ledger_name).await {
-                                Ok(session) => {
-                                    add_session(&active_session_count, &sessions, session).await;
-
-                                    try_send_session_to_session_requesters(
-                                        &sessions,
-                                        &session_requests,
-                                    )
-                                    .await;
-
-                                    if active_session_count.load(Relaxed) < max_sessions
-                                        && !session_requests.lock().await.is_empty()
-                                    {
-                                        let _ = session_create_request.send(()).await;
-                                    }
+                                    };
                                 }
-                                Err(_) => {
-                                    Timer::after(Duration::from_millis(100)).await;
+                            })
+                            .detach();
+                    }
 
-                                    let _ = session_create_request.send(()).await;
-                                }
-                            };
-                        }
-                    })
-                    .detach();
-            }
-
-            futures::executor::block_on(executor.run(futures::future::pending::<()>()));
-        });
-
-        SessionPool { sender, is_closed }
+                    futures::executor::block_on(executor.run(futures::future::pending::<()>()));
+                });
+        */
+        SessionPool {
+            sender_request: requesting_sender_return,
+            sender_return: returning_sender,
+            is_closed: is_closed_return,
+        }
     }
 
     pub async fn close(&self) {
@@ -204,9 +282,7 @@ impl SessionPool {
     pub async fn get(&self) -> eyre::Result<Session> {
         let (sender, receiver) = bounded::<Session>(1);
 
-        self.sender
-            .try_send(PoolCommand::Request(sender))
-            .wrap_err("Session pool closed")?;
+        self.sender_request.try_send(sender).wrap_err("Session pool closed")?;
 
         let session = receiver.recv().await.wrap_err("Session pool closed")?;
 
@@ -214,14 +290,11 @@ impl SessionPool {
     }
 
     pub fn give_back(&self, session: Session) {
-        let _ = self.sender.try_send(PoolCommand::Return(session));
+        let _ = self.sender_return.try_send(session);
     }
 }
 
-async fn create_session(
-    qldb_client: &Arc<QldbSessionClient>,
-    ledger_name: &str,
-) -> Result<Session, GetSessionError> {
+async fn create_session(qldb_client: &Arc<QldbSessionClient>, ledger_name: &str) -> Result<Session, GetSessionError> {
     let mut tries: u32 = 0;
 
     let session = loop {
@@ -236,9 +309,7 @@ async fn create_session(
                 ))
                 .await;
             }
-            Err(GetSessionError::Unrecoverable(error)) => {
-                break Err(GetSessionError::Unrecoverable(error))
-            }
+            err @ Err(GetSessionError::Unrecoverable(_)) => break err,
         }
     }?;
 
@@ -253,10 +324,17 @@ enum GetSessionError {
     Recoverable(eyre::Report),
 }
 
-async fn qldb_request_session(
-    qldb_client: &QldbSessionClient,
-    ledger_name: &str,
-) -> Result<String, GetSessionError> {
+fn provide_session(sender: &Sender<Session>, session: Session) {
+    // This channel should never be full or closed
+    if let Err(err) = sender.try_send(session) {
+        error!(
+            "QLDB driver internal error. Cannot return session due to channel issue: {:?}",
+            err
+        );
+    }
+}
+
+async fn qldb_request_session(qldb_client: &QldbSessionClient, ledger_name: &str) -> Result<String, GetSessionError> {
     match qldb_client
         .send_command(SendCommandRequest {
             start_session: Some(StartSessionRequest {
@@ -285,38 +363,53 @@ async fn qldb_request_session(
     }
 }
 
-async fn close_session(
+async fn refill_session(
     qldb_client: &Arc<QldbSessionClient>,
-    session: &Session,
-    active_session_count: &Rc<AtomicU16>,
+    ledger_name: &str,
+    sessions: &Rc<RefCell<VecDeque<Session>>>,
 ) {
-    let mut tries: u32 = 0;
-
-    loop {
-        tries = tries.saturating_add(1);
-
-        match qldb_close_session(qldb_client, session).await {
-            Ok(_) => break,
-            Err(_) if tries > 10 => break,
-            Err(_) => {
-                Timer::after(Duration::from_millis(
-                    tries.saturating_mul(tries).saturating_mul(75).into(),
-                ))
-                .await;
-            }
+    if let Ok(session) = create_session(&qldb_client.clone(), ledger_name).await {
+        if let Ok(mut sessions) = sessions.try_borrow_mut() {
+            sessions.push_back(session);
         }
     }
-
-    active_session_count.store(
-        active_session_count.load(Relaxed).saturating_sub(1),
-        Relaxed,
-    );
 }
 
-async fn qldb_close_session(
-    qldb_client: &QldbSessionClient,
-    session: &Session,
-) -> Result<(), eyre::Report> {
+fn close_session(
+    executor: &Rc<LocalExecutor<'_>>,
+    qldb_client: &Arc<QldbSessionClient>,
+    session: Session,
+    session_count: &Rc<AtomicU16>,
+) {
+    let executor = executor.clone();
+    let qldb_client = qldb_client.clone();
+    let session_count = session_count.clone();
+
+    executor
+        .spawn(async move {
+            let mut tries: u32 = 0;
+
+            loop {
+                tries = tries.saturating_add(1);
+
+                match qldb_close_session(&qldb_client, &session).await {
+                    Ok(_) => break,
+                    Err(_) if tries > 10 => break,
+                    Err(_) => {
+                        Timer::after(Duration::from_millis(
+                            tries.saturating_mul(tries).saturating_mul(75).into(),
+                        ))
+                        .await;
+                    }
+                }
+            }
+
+            session_count.store(session_count.load(Relaxed).saturating_sub(1), Relaxed);
+        })
+        .detach();
+}
+
+async fn qldb_close_session(qldb_client: &QldbSessionClient, session: &Session) -> Result<(), eyre::Report> {
     qldb_client
         .send_command(SendCommandRequest {
             session_token: Some(session.get_session_id().to_string()),
@@ -328,63 +421,11 @@ async fn qldb_close_session(
     Ok(())
 }
 
-fn get_session_from_send_err(error: TrySendError<Session>) -> Session {
-    match error {
-        TrySendError::Full(session) => session,
-        TrySendError::Closed(session) => session,
+fn requeue_session_request(session_requests: &Sender<Sender<Session>>, sender: Sender<Session>) {
+    if let Err(err) = session_requests.try_send(sender) {
+        error!(
+            "QLDB driver internal error. Cannot enqueue session due pool bug: {:?}",
+            err
+        );
     }
-}
-
-async fn try_send_session_to_session_requesters(
-    sessions: &Rc<Mutex<VecDeque<Session>>>,
-    session_requests: &Rc<Mutex<VecDeque<Sender<Session>>>>,
-) {
-    let session = loop {
-        let session = sessions.lock().await.pop_back();
-
-        match session {
-            None => break None,
-            Some(session) => {
-                if let Some(sender) = session_requests.lock().await.pop_back() {
-                    if let Err(error) = sender.try_send(session) {
-                        let session = get_session_from_send_err(error);
-
-                        sessions.lock().await.push_front(session);
-
-                        continue;
-                    }
-                } else {
-                    break Some(session);
-                }
-            }
-        }
-    };
-
-    if let Some(session) = session {
-        sessions.lock().await.push_front(session);
-    }
-}
-
-async fn try_send_session(
-    sender: &Sender<Session>,
-    session: Session,
-    sessions: &Rc<Mutex<VecDeque<Session>>>,
-) {
-    if let Err(error) = sender.try_send(session) {
-        let session = get_session_from_send_err(error);
-
-        sessions.lock().await.push_front(session);
-    }
-}
-
-async fn add_session(
-    active_session_count: &Rc<AtomicU16>,
-    sessions: &Rc<Mutex<VecDeque<Session>>>,
-    session: Session,
-) {
-    active_session_count.store(
-        active_session_count.load(Relaxed).saturating_add(1),
-        Relaxed,
-    );
-    sessions.lock().await.push_front(session);
 }
