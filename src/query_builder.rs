@@ -1,8 +1,7 @@
 use crate::{Cursor, DocumentCollection, QldbError, QldbResult, Transaction};
 use ion_binary_rs::{IonEncoder, IonParser, IonValue};
 use rusoto_qldb_session::{
-    ExecuteStatementRequest, FetchPageRequest, QldbSession, QldbSessionClient, SendCommandRequest,
-    ValueHolder,
+    ExecuteStatementRequest, FetchPageRequest, QldbSession, QldbSessionClient, SendCommandRequest, ValueHolder,
 };
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
@@ -68,10 +67,7 @@ impl QueryBuilder {
         Ok(result)
     }
 
-    pub(crate) async fn execute_get_page(
-        &mut self,
-        page_token: &str,
-    ) -> QldbResult<(Vec<IonValue>, Option<String>)> {
+    pub(crate) async fn execute_get_page(&mut self, page_token: &str) -> QldbResult<(Vec<IonValue>, Option<String>)> {
         let result = self
             .client
             .send_command(create_next_page_command(
@@ -97,9 +93,7 @@ impl QueryBuilder {
         Ok((values, next_page_token))
     }
 
-    pub(crate) async fn execute_statement(
-        &mut self,
-    ) -> QldbResult<(Vec<IonValue>, Option<String>)> {
+    pub(crate) async fn execute_statement(&mut self) -> QldbResult<(Vec<IonValue>, Option<String>)> {
         if self.tx.is_completed().await {
             return Err(QldbError::TransactionCompleted);
         }
@@ -228,11 +222,7 @@ fn create_send_command(
     }
 }
 
-fn create_next_page_command(
-    session: &str,
-    transaction_id: &str,
-    next_page_token: &str,
-) -> SendCommandRequest {
+fn create_next_page_command(session: &str, transaction_id: &str, next_page_token: &str) -> SendCommandRequest {
     SendCommandRequest {
         session_token: Some(session.to_string()),
         fetch_page: Some(FetchPageRequest {

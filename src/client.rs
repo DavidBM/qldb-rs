@@ -41,11 +41,7 @@ impl QldbClient {
         // TODO: Map error correctly
         let http_client = HttpClient::new()?;
 
-        let client = Arc::new(QldbSessionClient::new_with(
-            http_client,
-            credentials,
-            region,
-        ));
+        let client = Arc::new(QldbSessionClient::new_with(http_client, credentials, region));
 
         let session_pool = Arc::new(SessionPool::new(client.clone(), ledger_name, max_sessions));
 
@@ -79,35 +75,15 @@ impl QldbClient {
     /// directly. If not, you may be better off using the method
     /// `transaction_within`.
     pub async fn transaction(&self) -> QldbResult<Transaction> {
-        let session = self
-            .session_pool
-            .get()
-            .await
-            .map_err(QldbError::SessionPoolClosed)?;
+        let session = self.session_pool.get().await.map_err(QldbError::SessionPoolClosed)?;
 
-        Transaction::new(
-            self.client.clone(),
-            self.session_pool.clone(),
-            session,
-            false,
-        )
-        .await
+        Transaction::new(self.client.clone(), self.session_pool.clone(), session, false).await
     }
 
     pub(crate) async fn auto_rollback_transaction(&self) -> QldbResult<Transaction> {
-        let session = self
-            .session_pool
-            .get()
-            .await
-            .map_err(QldbError::SessionPoolClosed)?;
+        let session = self.session_pool.get().await.map_err(QldbError::SessionPoolClosed)?;
 
-        Transaction::new(
-            self.client.clone(),
-            self.session_pool.clone(),
-            session,
-            true,
-        )
-        .await
+        Transaction::new(self.client.clone(), self.session_pool.clone(), session, true).await
     }
 
     /// It closes the session pool. Current transaction which already have a

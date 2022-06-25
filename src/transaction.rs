@@ -5,8 +5,8 @@ use futures::lock::Mutex;
 use futures::lock::MutexGuard;
 use ion_binary_rs::{IonEncoder, IonHash, IonValue};
 use rusoto_qldb_session::{
-    AbortTransactionRequest, CommitTransactionRequest, QldbSession, QldbSessionClient,
-    SendCommandRequest, StartTransactionRequest,
+    AbortTransactionRequest, CommitTransactionRequest, QldbSession, QldbSessionClient, SendCommandRequest,
+    StartTransactionRequest,
 };
 use sha2::Sha256;
 use std::fmt::Debug;
@@ -39,8 +39,7 @@ impl Transaction {
         session: Session,
         auto_rollback: bool,
     ) -> QldbResult<Transaction> {
-        let transaction_id =
-            Transaction::get_transaction_id(&client, session.get_session_id()).await?;
+        let transaction_id = Transaction::get_transaction_id(&client, session.get_session_id()).await?;
 
         // TODO: Add transaction_id to the IonHash
         let hasher = IonHash::from_ion_value::<Sha256>(&IonValue::String(transaction_id.clone()));
@@ -59,12 +58,7 @@ impl Transaction {
     /// Sends a query to QLDB. It will return an Array of IonValues
     /// already decoded. Parameters need to be provided using IonValue.
     pub fn query(&self, statement: &str) -> QueryBuilder {
-        QueryBuilder::new(
-            self.client.clone(),
-            self.clone(),
-            statement,
-            self.auto_rollback,
-        )
+        QueryBuilder::new(self.client.clone(), self.clone(), statement, self.auto_rollback)
     }
 
     pub async fn commit(&self) -> QldbResult<()> {
@@ -158,19 +152,14 @@ impl Transaction {
         }
     }
 
-    fn complete(
-        &self,
-        mut is_completed: MutexGuard<'_, TransactionStatus>,
-        status: TransactionStatus,
-    ) {
+    fn complete(&self, mut is_completed: MutexGuard<'_, TransactionStatus>, status: TransactionStatus) {
         *is_completed = status;
         // TODO: We maybe shouldn't be ignoring this error
         let _ = self.session_pool.give_back((*self.session).clone());
     }
 
     pub(crate) async fn hash_query(&self, statement: &str, params: &[IonValue]) {
-        let mut hasher =
-            IonHash::from_ion_value::<Sha256>(&IonValue::String(statement.to_string()));
+        let mut hasher = IonHash::from_ion_value::<Sha256>(&IonValue::String(statement.to_string()));
 
         for param in params {
             let mut encoder = IonEncoder::new();
@@ -182,13 +171,8 @@ impl Transaction {
         self.hasher.lock().await.dot(hasher);
     }
 
-    async fn get_transaction_id(
-        client: &Arc<QldbSessionClient>,
-        session: &str,
-    ) -> QldbResult<String> {
-        let response = client
-            .send_command(create_start_transaction_command(session))
-            .await?;
+    async fn get_transaction_id(client: &Arc<QldbSessionClient>, session: &str) -> QldbResult<String> {
+        let response = client.send_command(create_start_transaction_command(session)).await?;
 
         let token = match response.start_transaction {
             Some(session) => match session.transaction_id {
@@ -212,11 +196,7 @@ impl Debug for Transaction {
     }
 }
 
-fn create_commit_command(
-    session: &str,
-    transaction_id: &str,
-    commit_digest: &[u8],
-) -> SendCommandRequest {
+fn create_commit_command(session: &str, transaction_id: &str, commit_digest: &[u8]) -> SendCommandRequest {
     SendCommandRequest {
         session_token: Some(session.to_string()),
         commit_transaction: Some(CommitTransactionRequest {

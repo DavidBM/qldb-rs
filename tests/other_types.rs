@@ -49,14 +49,8 @@ async fn qldb_type_float() -> Result<()> {
         assert_eq!(values.get("MIN64").unwrap(), &IonValue::Float(f64::MIN));
         assert_eq!(values.get("MAX64").unwrap(), &IonValue::Float(f64::MAX));
         assert_eq!(values.get("0").unwrap(), &IonValue::Float(0.0));
-        assert_eq!(
-            values.get("-123.123123123").unwrap(),
-            &IonValue::Float(-123.123123123)
-        );
-        assert_eq!(
-            values.get("123.123123123").unwrap(),
-            &IonValue::Float(123.123123123)
-        );
+        assert_eq!(values.get("-123.123123123").unwrap(), &IonValue::Float(-123.123123123));
+        assert_eq!(values.get("123.123123123").unwrap(), &IonValue::Float(123.123123123));
     })
     .await
 }
@@ -64,10 +58,7 @@ async fn qldb_type_float() -> Result<()> {
 #[async_std::test]
 async fn qldb_type_string() -> Result<()> {
     create_type_test(get_value_to_insert_strings(), |values| {
-        assert_eq!(
-            values.get("1").unwrap(),
-            &IonValue::String("test".to_string())
-        );
+        assert_eq!(values.get("1").unwrap(), &IonValue::String("test".to_string()));
         assert_eq!(values.get("2").unwrap(), &IonValue::String("".to_string()));
         assert_eq!(
             values.get("3").unwrap(),
@@ -100,10 +91,7 @@ async fn qldb_type_string() -> Result<()> {
 #[async_std::test]
 async fn qldb_type_symbol() -> Result<()> {
     create_type_test(get_value_to_insert_symbols(), |values| {
-        assert_eq!(
-            values.get("1").unwrap(),
-            &IonValue::Symbol("test".to_string())
-        );
+        assert_eq!(values.get("1").unwrap(), &IonValue::Symbol("test".to_string()));
         assert_eq!(values.get("2").unwrap(), &IonValue::Symbol("".to_string()));
         assert_eq!(
             values.get("3").unwrap(),
@@ -154,12 +142,7 @@ async fn qldb_type_list() -> Result<()> {
     create_type_test(get_value_to_insert_list(), |values| {
         assert_eq!(
             values.get("1").unwrap(),
-            &IonValue::List(
-                vec!["list", "of", "strings"]
-                    .iter()
-                    .map(|v| v.into())
-                    .collect()
-            )
+            &IonValue::List(vec!["list", "of", "strings"].iter().map(|v| v.into()).collect())
         );
     })
     .await
@@ -170,12 +153,7 @@ async fn qldb_type_sexpr() -> Result<()> {
     create_type_test(get_value_to_insert_sexpr(), |values| {
         assert_eq!(
             values.get("1").unwrap(),
-            &IonValue::SExpr(
-                vec!["list", "of", "strings"]
-                    .iter()
-                    .map(|v| v.into())
-                    .collect()
-            )
+            &IonValue::SExpr(vec!["list", "of", "strings"].iter().map(|v| v.into()).collect())
         );
     })
     .await
@@ -239,10 +217,7 @@ fn get_value_to_insert_symbols() -> IonValue {
         "3",
         IonValue::Symbol("찦차를 타고 온 펲시맨과 쑛다리 똠방각하".to_string()),
     );
-    map.insert(
-        "4",
-        IonValue::Symbol(",。・:*:・゜’( ☻ ω ☻ )。・:*:・゜’".to_string()),
-    );
+    map.insert("4", IonValue::Symbol(",。・:*:・゜’( ☻ ω ☻ )。・:*:・゜’".to_string()));
     map.insert(
         "5",
         IonValue::Symbol("❤️ 💔 💌 💕 💞 💓 💗 💖 💘 💝 💟 💜 💛 💚 💙".to_string()),

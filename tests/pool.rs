@@ -55,9 +55,6 @@ async fn closing_session_pool() -> Result<()> {
 
 fn get_value_to_insert() -> IonValue {
     let mut map = HashMap::new();
-    map.insert(
-        "test_column".to_string(),
-        IonValue::String("test_value".to_string()),
-    );
+    map.insert("test_column".to_string(), IonValue::String("test_value".to_string()));
     IonValue::Struct(map)
 }

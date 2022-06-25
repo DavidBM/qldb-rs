@@ -33,10 +33,7 @@ fn check_document() {
     let new_value: String = document.get_optional_value("Type").unwrap().unwrap();
     assert_eq!(new_value, "Sedan");
 
-    let is_none = document
-        .get_optional_value::<String>("Tipe")
-        .unwrap()
-        .is_none();
+    let is_none = document.get_optional_value::<String>("Tipe").unwrap().is_none();
     assert_eq!(is_none, true);
 }
 

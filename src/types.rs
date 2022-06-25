@@ -20,15 +20,15 @@ pub enum QldbError {
     TransactionCompleted,
     #[error("We weren't able to send the result value to ourselves. This is a bug.")]
     InternalChannelSendError,
-    #[error("The statement provided to the count method didn't return what a normal SELECT COUNT(... would have returned.")]
+    #[error(
+        "The statement provided to the count method didn't return what a normal SELECT COUNT(... would have returned."
+    )]
     NonValidCountStatementResult,
     #[error("The transaction is already committed, it cannot be rollback")]
     TransactionAlreadyCommitted,
     #[error("The transaction is already rollback, it cannot be committed")]
     TransactionAlreadyRollback,
-    #[error(
-        "The query was already executed. Trying to get a Cursor or executing it again will fail."
-    )]
+    #[error("The query was already executed. Trying to get a Cursor or executing it again will fail.")]
     QueryAlreadyExecuted,
     #[error("Error extranting the QLDB returned Ion values to the requested type.")]
     QldbExtractError(#[from] QldbExtractError),
