@@ -40,7 +40,7 @@
 //! # Session Pool
 //!
 //! The driver has a session pool. The second parameter in the
-//! QldbClient::default is the maximun size of the connection pool.
+//! QldbClient::default is the maximum size of the connection pool.
 //!
 //! The pool will be auto-populated as parallel transaction are being
 //! requested until it reaches the provided maximum.
@@ -48,6 +48,12 @@
 //! The pool uses one independent thread with a single-threaded 
 //! executor in order to be able to spawn tasks after the session has 
 //! been returned.
+//! 
+//! # Underlying Ion Format Implementation
+//! 
+//! The library uses [ion-binary-rs](https://crates.io/crates/ion-binary-rs), 
+//! which is our own, pure rust, implementation of the format. It is very 
+//! well tested and ready to use in production too.
 //!
 //! # Test
 //!
