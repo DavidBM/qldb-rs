@@ -7,7 +7,6 @@
 //! [![Rust](https://github.com/Couragium/qldb-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/Couragium/qldb-rs/actions/workflows/rust.yml)
 //!
 //! The driver is fairly tested and should be ready to test in real projects.
-//! We are using it internally, so we will keep it updated.
 //!
 //! ## Example
 //!
@@ -45,6 +44,10 @@
 //!
 //! The pool will be auto-populated as parallel transaction are being
 //! requested until it reaches the provided maximum.
+//! 
+//! The pool uses one independent thread with a single-threaded 
+//! executor in order to be able to spawn tasks after the session has 
+//! been returned.
 //!
 //! # Test
 //!
