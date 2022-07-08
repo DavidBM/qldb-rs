@@ -1,4 +1,4 @@
-use crate::session_pool::{Session, SessionPool};
+use crate::session_pool::{Session, ThreadedSessionPool};
 use crate::types::{QldbError, QldbResult};
 use crate::QueryBuilder;
 use futures::lock::Mutex;
@@ -24,7 +24,7 @@ enum TransactionStatus {
 #[derive(Clone)]
 pub struct Transaction {
     client: Arc<QldbSessionClient>,
-    session_pool: Arc<SessionPool>,
+    session_pool: Arc<ThreadedSessionPool>,
     pub(crate) transaction_id: Arc<String>,
     pub(crate) session: Arc<Session>,
     completed: Arc<Mutex<TransactionStatus>>,
@@ -35,7 +35,7 @@ pub struct Transaction {
 impl Transaction {
     pub(crate) async fn new(
         client: Arc<QldbSessionClient>,
-        session_pool: Arc<SessionPool>,
+        session_pool: Arc<ThreadedSessionPool>,
         session: Session,
         auto_rollback: bool,
     ) -> QldbResult<Transaction> {
@@ -154,8 +154,7 @@ impl Transaction {
 
     fn complete(&self, mut is_completed: MutexGuard<'_, TransactionStatus>, status: TransactionStatus) {
         *is_completed = status;
-        // TODO: We maybe shouldn't be ignoring this error
-        let _ = self.session_pool.give_back((*self.session).clone());
+        self.session_pool.give_back((*self.session).clone());
     }
 
     pub(crate) async fn hash_query(&self, statement: &str, params: &[IonValue]) {

@@ -1,60 +1,26 @@
+use crate::session_pool::{Session, qldb_close_session, qldb_request_session, GetSessionError};
+use rusoto_qldb_session::QldbSessionClient;
 use async_channel::{bounded, unbounded, Sender};
-use async_compat::CompatExt;
 use async_executor::LocalExecutor;
 use async_io::Timer;
 use eyre::WrapErr;
 use log::error;
-use rusoto_core::RusotoError;
-use rusoto_qldb_session::{EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
-use std::sync::atomic::AtomicBool;
-use std::sync::{
-    atomic::{AtomicU16, Ordering::Relaxed},
-    Arc,
-};
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering::Relaxed};
+use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
-struct InnerSession {
-    created_on_instant: Instant,
-    session_id: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct Session {
-    inner: Arc<InnerSession>,
-}
-
-impl Session {
-    pub fn new(session_id: String) -> Session {
-        Session {
-            inner: Arc::new(InnerSession {
-                created_on_instant: Instant::now(),
-                session_id,
-            }),
-        }
-    }
-
-    pub fn get_session_id(&self) -> &str {
-        &self.inner.session_id
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.inner.created_on_instant.elapsed().as_secs() < 10 * 60
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct SessionPool {
+pub struct ThreadedSessionPool {
     sender_request: Sender<Sender<Session>>,
     sender_return: Sender<Session>,
     is_closed: Arc<AtomicBool>,
 }
 
-impl SessionPool {
-    pub fn new(qldb_client: Arc<QldbSessionClient>, ledger_name: &str, max_sessions: u16) -> SessionPool {
+impl ThreadedSessionPool {
+    pub fn new(qldb_client: Arc<QldbSessionClient>, ledger_name: &str, max_sessions: u16) -> ThreadedSessionPool {
         let (requesting_sender, requesting_receiver) = unbounded::<Sender<Session>>();
         let (returning_sender, returning_receiver) = unbounded::<Session>();
         let ledger_name = ledger_name.to_owned();
@@ -149,7 +115,7 @@ impl SessionPool {
             futures::executor::block_on(executor.run(futures::future::pending::<()>()));
         });
 
-        SessionPool {
+        ThreadedSessionPool {
             sender_request: requesting_sender_return,
             sender_return: returning_sender,
             is_closed: is_closed_return,
@@ -171,6 +137,7 @@ impl SessionPool {
     }
 
     pub fn give_back(&self, session: Session) {
+        // TODO: We maybe shouldn't be ignoring this error
         let _ = self.sender_return.try_send(session);
     }
 }
@@ -197,14 +164,6 @@ async fn create_session(qldb_client: &Arc<QldbSessionClient>, ledger_name: &str)
     Ok(Session::new(session))
 }
 
-#[derive(Debug, thiserror::Error)]
-enum GetSessionError {
-    #[error("The QLDB command returned an error")]
-    Unrecoverable(eyre::Report),
-    #[error("The QLDB command returned an error")]
-    Recoverable(eyre::Report),
-}
-
 fn provide_session(sender: &Sender<Session>, session: Session) {
     // This channel should never be full or closed
     if let Err(err) = sender.try_send(session) {
@@ -212,35 +171,6 @@ fn provide_session(sender: &Sender<Session>, session: Session) {
             "QLDB driver internal error. Cannot return session due to channel issue: {:?}",
             err
         );
-    }
-}
-
-async fn qldb_request_session(qldb_client: &QldbSessionClient, ledger_name: &str) -> Result<String, GetSessionError> {
-    match qldb_client
-        .send_command(SendCommandRequest {
-            start_session: Some(StartSessionRequest {
-                ledger_name: ledger_name.to_string(),
-            }),
-            ..Default::default()
-        })
-        .compat()
-        .await
-    {
-        Ok(response) => match response.start_session {
-            Some(session) => match session.session_token {
-                Some(token) => Ok(token),
-                None => Err(GetSessionError::Unrecoverable(eyre::eyre!(
-                    "No session present on QLDB response"
-                ))),
-            },
-            None => Err(GetSessionError::Unrecoverable(eyre::eyre!(
-                "Empty session on QLDB response"
-            ))),
-        },
-        Err(err) => match err {
-            RusotoError::Credentials(_) => Err(GetSessionError::Unrecoverable(eyre::eyre!(err))),
-            _ => Err(GetSessionError::Recoverable(eyre::eyre!(err))),
-        },
     }
 }
 
@@ -288,18 +218,6 @@ fn close_session(
             session_count.store(session_count.load(Relaxed).saturating_sub(1), Relaxed);
         })
         .detach();
-}
-
-async fn qldb_close_session(qldb_client: &QldbSessionClient, session: &Session) -> Result<(), eyre::Report> {
-    qldb_client
-        .send_command(SendCommandRequest {
-            session_token: Some(session.get_session_id().to_string()),
-            end_session: Some(EndSessionRequest {}),
-            ..Default::default()
-        })
-        .await?;
-
-    Ok(())
 }
 
 fn requeue_session_request(session_requests: &Sender<Sender<Session>>, sender: Sender<Session>) {
