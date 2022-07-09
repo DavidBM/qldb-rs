@@ -1,4 +1,4 @@
-use crate::{session_pool::ThreadedSessionPool, QldbError, QldbResult, QueryBuilder, Transaction};
+use crate::{session_pool::{ThreadedSessionPool, SessionPool}, QldbError, QldbResult, QueryBuilder, Transaction};
 use rusoto_core::{credential::ChainProvider, request::HttpClient, Region};
 use rusoto_qldb_session::QldbSessionClient;
 use std::future::Future;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub struct QldbClient {
     client: Arc<QldbSessionClient>,
     _ledger_name: String,
-    session_pool: Arc<ThreadedSessionPool>,
+    session_pool: Arc<dyn SessionPool>,
 }
 
 impl QldbClient {

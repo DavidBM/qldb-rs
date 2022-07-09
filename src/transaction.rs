@@ -1,4 +1,4 @@
-use crate::session_pool::{Session, ThreadedSessionPool};
+use crate::session_pool::{Session, SessionPool};
 use crate::types::{QldbError, QldbResult};
 use crate::QueryBuilder;
 use futures::lock::Mutex;
@@ -24,7 +24,7 @@ enum TransactionStatus {
 #[derive(Clone)]
 pub struct Transaction {
     client: Arc<QldbSessionClient>,
-    session_pool: Arc<ThreadedSessionPool>,
+    session_pool: Arc<dyn SessionPool>,
     pub(crate) transaction_id: Arc<String>,
     pub(crate) session: Arc<Session>,
     completed: Arc<Mutex<TransactionStatus>>,
@@ -35,7 +35,7 @@ pub struct Transaction {
 impl Transaction {
     pub(crate) async fn new(
         client: Arc<QldbSessionClient>,
-        session_pool: Arc<ThreadedSessionPool>,
+        session_pool: Arc<dyn SessionPool>,
         session: Session,
         auto_rollback: bool,
     ) -> QldbResult<Transaction> {

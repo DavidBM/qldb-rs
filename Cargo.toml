@@ -1,6 +1,6 @@
 [package]
 name = "qldb"
-version = "3.1.4"
+version = "3.1.5"
 authors = ["Couragium Solutions <info@couragium.com>"]
 edition = "2018"
 
@@ -30,6 +30,7 @@ eyre = "0.6"
 async-compat = "0.2"
 async-lock = "2.5"
 log = "0.4"
+async-trait = "0.1.56"
 
 [dev-dependencies]
 chrono = "0.4"
