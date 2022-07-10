@@ -63,23 +63,37 @@
 //! Example with async-std:
 //!
 //! ```rust,no_run
+//! use qldb::QldbClient;
+//! use std::sync::Arc;
+//! # use eyre::Result;
+//!
+//! # async fn test() -> Result<()> {
 //!     let client = QldbClient::default_with_spawner(
 //!         "rust-crate-test",
 //!         200,
 //!         Arc::new(move |fut| {async_std::task::spawn(Box::pin(fut));})
 //!     )
-//!     .await?
+//!     .await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! Or, with tokio:
 //!
 //! ```rust,no_run
+//! use qldb::QldbClient;
+//! use std::sync::Arc;
+//! # use eyre::Result;
+//!
+//! # async fn test() -> Result<()> {
 //!     let client = QldbClient::default_with_spawner(
 //!         "rust-crate-test",
 //!         200,
 //!         Arc::new(move |fut| {tokio::spawn(Box::pin(fut));})
 //!     )
-//!     .await?
+//!     .await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Select the pool you want to use
