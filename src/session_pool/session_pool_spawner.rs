@@ -1,23 +1,20 @@
-use crate::session_pool::{Session, SessionPool, agnostic_async_pool_monothread::{returning_task, receiver_task}};
+use crate::session_pool::{Session, SessionPool, SpawnerFnMonoMultithread, agnostic_async_pool_multithread::{returning_task, receiver_task}};
 use rusoto_qldb_session::QldbSessionClient;
 use async_channel::{bounded, unbounded, Sender};
-use async_executor::LocalExecutor;
 use eyre::WrapErr;
-use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering::Relaxed};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
-pub struct ThreadedSessionPool {
+pub struct SpawnerSessionPool {
     sender_request: Sender<Sender<Session>>,
     sender_return: Sender<Session>,
     is_closed: Arc<AtomicBool>,
 }
 
-impl ThreadedSessionPool {
-    pub fn new(qldb_client: Arc<QldbSessionClient>, ledger_name: &str, max_sessions: u16) -> ThreadedSessionPool {
+impl SpawnerSessionPool {
+    pub fn new(qldb_client: Arc<QldbSessionClient>, ledger_name: &str, max_sessions: u16, spawner: SpawnerFnMonoMultithread) -> SpawnerSessionPool {
         let (requesting_sender, requesting_receiver) = unbounded::<Sender<Session>>();
         let (returning_sender, returning_receiver) = unbounded::<Session>();
         let ledger_name = ledger_name.to_owned();
@@ -27,39 +24,31 @@ impl ThreadedSessionPool {
         let is_closed_return = is_closed.clone();
         let requesting_sender_return = requesting_sender.clone();
 
-        std::thread::spawn(move || {
-            let executor = Arc::new(LocalExecutor::new());
-            let executor2 = executor.clone();
-            let executor3 = executor.clone();
-            let sessions = Rc::new(RefCell::new(VecDeque::<Session>::with_capacity(max_sessions.into())));
-            let session_count = Rc::new(AtomicU16::new(0));
+        let sessions = Arc::new(Mutex::new(VecDeque::<Session>::with_capacity(max_sessions.into())));
+        let session_count = Arc::new(AtomicU16::new(0));
 
-            receiver_task(
-                Arc::new(move |fut| executor.spawn(Box::pin(fut)).detach()),
-                max_sessions,
-                &ledger_name,
-                &sessions,
-                &session_count,
-                &qldb_client,
-                &is_closed,
-                requesting_receiver,
-                requesting_sender
-            );
+        receiver_task(
+            spawner.clone(),
+            max_sessions,
+            &ledger_name,
+            &sessions,
+            &session_count,
+            &qldb_client,
+            &is_closed,
+            requesting_receiver,
+            requesting_sender
+        );
 
-            returning_task(
-                Arc::new(move |fut| executor2.spawn(Box::pin(fut)).detach()),
-                &sessions,
-                &session_count,
-                &qldb_client,
-                &is_closed,
-                returning_receiver,
-            );
+        returning_task(
+            spawner,
+            &sessions,
+            &session_count,
+            &qldb_client,
+            &is_closed,
+            returning_receiver,
+        );
 
-
-            futures::executor::block_on(executor3.run(futures::future::pending::<()>()));
-        });
-
-        ThreadedSessionPool {
+        SpawnerSessionPool {
             sender_request: requesting_sender_return,
             sender_return: returning_sender,
             is_closed: is_closed_return,
@@ -87,7 +76,7 @@ impl ThreadedSessionPool {
 }
 
 #[async_trait::async_trait]
-impl SessionPool for ThreadedSessionPool {
+impl SessionPool for SpawnerSessionPool {
     async fn close(&self) {
         self.close().await
     }

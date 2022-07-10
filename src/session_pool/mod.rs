@@ -1,10 +1,15 @@
 mod session_pool_thread;
-mod agnostic_async_pool;
+mod agnostic_async_pool_monothread;
+mod agnostic_async_pool_multithread;
+#[cfg(feature = "internal_pool_with_spawner")]
+mod session_pool_spawner;
 
 use std::pin::Pin;
 use std::sync::Arc;
 use std::{time::Instant, future::Future};
 pub use session_pool_thread::ThreadedSessionPool;
+#[cfg(feature = "internal_pool_with_spawner")]
+pub use session_pool_spawner::SpawnerSessionPool;
 use log::error;
 
 #[derive(Debug, Clone)]
@@ -54,4 +59,6 @@ pub trait SessionPool {
     fn give_back(&self, session: Session);
 }
 
-type SpawnerFn = Arc<dyn Fn(Pin<Box<dyn Future<Output = ()>>>)>;
+pub type SpawnerFnMonothread = Arc<dyn Fn(Pin<Box<dyn Future<Output = ()>>>)>;
+
+pub type SpawnerFnMonoMultithread = Arc<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send + Sync>;

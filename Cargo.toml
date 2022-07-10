@@ -1,6 +1,6 @@
 [package]
 name = "qldb"
-version = "3.1.5"
+version = "3.2.5"
 authors = ["Couragium Solutions <info@couragium.com>"]
 edition = "2018"
 
@@ -37,3 +37,8 @@ chrono = "0.4"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
 bigdecimal = "0.3"
 rand = "0.8"
+tokio = "1.19.2"
+
+[features]
+default = ["internal_pool_with_spawner"]
+internal_pool_with_spawner = []

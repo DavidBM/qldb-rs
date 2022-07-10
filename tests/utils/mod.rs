@@ -1,3 +1,5 @@
+pub mod cursor_utils;
+
 use eyre::Result;
 use ion_binary_rs::IonValue;
 use qldb::QldbClient;

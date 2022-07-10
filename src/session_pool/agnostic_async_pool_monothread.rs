@@ -1,22 +1,18 @@
-use crate::session_pool::{SpawnerFn, Session, GetSessionError};
+use crate::session_pool::{SpawnerFnMonothread, Session, GetSessionError};
 use async_io::Timer;
-use std::time::Duration;
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::sync::atomic::AtomicU16;
-use std::sync::atomic::AtomicBool;
+use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering::Relaxed};
 use async_channel::Receiver;
 use async_channel::Sender;
-use std::sync::atomic::Ordering::Relaxed;
-use std::collections::VecDeque;
 use std::sync::Arc;
+use std::collections::VecDeque;
 use log::error;
 use rusoto_qldb_session::{EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest};
 use rusoto_core::RusotoError;
 use async_compat::CompatExt;
 
 #[allow(clippy::too_many_arguments)]
-pub fn receiver_task(spawner: SpawnerFn, max_sessions: u16, ledger_name: &str, sessions: &Rc<RefCell<VecDeque<Session>>>, session_count: &Rc<AtomicU16>, qldb_client: &Arc<QldbSessionClient>, is_closed: &Arc<AtomicBool>, requesting_receiver: Receiver<Sender<Session>>, requesting_sender: Sender<Sender<Session>>) {
+pub fn receiver_task(spawner: SpawnerFnMonothread, max_sessions: u16, ledger_name: &str, sessions: &Rc<RefCell<VecDeque<Session>>>, session_count: &Rc<AtomicU16>, qldb_client: &Arc<QldbSessionClient>, is_closed: &Arc<AtomicBool>, requesting_receiver: Receiver<Sender<Session>>, requesting_sender: Sender<Sender<Session>>) {
     let is_closed = is_closed.clone();
     let qldb_client = qldb_client.clone();
     let sessions = sessions.clone();
@@ -45,7 +41,7 @@ pub fn receiver_task(spawner: SpawnerFn, max_sessions: u16, ledger_name: &str, s
                         provide_session(&sender, session);
                         break;
                     } else {
-                        close_session(&spawner, &qldb_client, session, &session_count);
+                        close_session(spawner.clone(), &qldb_client, session, &session_count);
                         // Continue so we try next available session
                         continue;
                     }
@@ -63,13 +59,14 @@ pub fn receiver_task(spawner: SpawnerFn, max_sessions: u16, ledger_name: &str, s
     }));
 }
 
-pub fn returning_task(spawner: SpawnerFn, sessions: &Rc<RefCell<VecDeque<Session>>>, session_count: &Rc<AtomicU16>, qldb_client: &Arc<QldbSessionClient>, is_closed: &Arc<AtomicBool>, returning_receiver: Receiver<Session>) {
+pub fn returning_task(spawner: SpawnerFnMonothread, sessions: &Rc<RefCell<VecDeque<Session>>>, session_count: &Rc<AtomicU16>, qldb_client: &Arc<QldbSessionClient>, is_closed: &Arc<AtomicBool>, returning_receiver: Receiver<Session>) {
     let is_closed = is_closed.clone();
     let qldb_client = qldb_client.clone();
     let sessions = sessions.clone();
     let session_count = session_count.clone();
 
-    spawner.clone()(Box::pin(async move {
+    spawner.clone()(
+        Box::pin(async move {
 
             while let Ok(session) = returning_receiver.recv().await {
                 if is_closed.load(Relaxed) {
@@ -77,13 +74,13 @@ pub fn returning_task(spawner: SpawnerFn, sessions: &Rc<RefCell<VecDeque<Session
                 }
 
                 if !session.is_valid() {
-                    close_session(&spawner, &qldb_client, session, &session_count);
+                    close_session(spawner.clone(), &qldb_client, session, &session_count);
                 } else if let Ok(mut sessions) = sessions.try_borrow_mut() {
                     sessions.push_front(session);
                 } else {
                     // Should never happens as the executor is single thread and
                     // the sessions should never be borrowed at the same time
-                    close_session(&spawner, &qldb_client, session, &session_count)
+                    close_session(spawner.clone(), &qldb_client, session, &session_count)
                 }
             }
         }
@@ -91,7 +88,7 @@ pub fn returning_task(spawner: SpawnerFn, sessions: &Rc<RefCell<VecDeque<Session
 }
 
 fn close_session(
-    spawner: &SpawnerFn,
+    spawner: SpawnerFnMonothread,
     qldb_client: &Arc<QldbSessionClient>,
     session: Session,
     session_count: &Rc<AtomicU16>,

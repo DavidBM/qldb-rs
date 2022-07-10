@@ -41,7 +41,6 @@ impl Transaction {
     ) -> QldbResult<Transaction> {
         let transaction_id = Transaction::get_transaction_id(&client, session.get_session_id()).await?;
 
-        // TODO: Add transaction_id to the IonHash
         let hasher = IonHash::from_ion_value::<Sha256>(&IonValue::String(transaction_id.clone()));
 
         Ok(Transaction {
