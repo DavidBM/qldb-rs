@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use ion_binary_rs::IonValue;
 use qldb::DocumentCollection;
 use qldb::QldbClient;
@@ -15,6 +17,20 @@ pub async fn cursor_800_documents_with_client(client: QldbClient) {
     let test_table = ensure_test_table(&client).await;
 
     let documents_model = format!("cursor_800_documents{}", rand_string());
+
+    let table = test_table.clone();
+    let _ = client
+        .transaction_within(|tx| async move {
+            let _ = tx
+                .query(&format!("CREATE INDEX ON {} (Model)", &table))
+                .execute()
+                .await;
+
+            Ok(())
+        })
+        .await; // This might fail if run in paralle, so we ignore the error.
+
+    println!("Model {}", documents_model);
 
     for _ in 0..INSERT_LOOP_COUNT {
         let table = test_table.clone();

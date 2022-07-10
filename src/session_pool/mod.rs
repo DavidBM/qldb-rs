@@ -51,7 +51,7 @@ enum GetSessionError {
 }
 
 #[async_trait::async_trait]
-pub trait SessionPool {
+pub trait SessionPool: Send + Sync {
     async fn close(&self);
 
     async fn get(&self) -> eyre::Result<Session>;
