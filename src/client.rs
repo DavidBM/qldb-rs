@@ -36,6 +36,7 @@ impl QldbClient {
     /// If it is not present it will fallback on the value associated with the current
     /// profile in ~/.aws/config or the file specified by the AWS_CONFIG_FILE environment
     /// variable. If that is malformed of absent it will fall back on Region::UsEast1
+    #[cfg(feature = "internal_pool_with_thread")]
     pub async fn default(ledger_name: &str, max_sessions: u16) -> QldbResult<QldbClient> {
         let region = Region::default();
 

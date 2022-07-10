@@ -46,8 +46,58 @@
 //! requested until it reaches the provided maximum.
 //! 
 //! The pool uses one independent thread with a single-threaded 
-//! executor in order to be able to spawn tasks after the session has 
-//! been returned.
+//! executor ([async-executor](https://crates.io/crates/async-executor)) 
+//! in order to be able to spawn tasks after the session has been returned.
+//! 
+//! ## Alternative session Pool
+//! 
+//! There is an alternative session pool that will require an spawner 
+//! function to be provided. It allows to have the pool running by using
+//! the spawn function of the executor you use. We tested async-std and 
+//! tokio, but others should work as well.
+//! 
+//! This pool will spawn two internal tasks handling the pool.
+//! 
+//! Use this if you want for this driver to not create a new thread.
+//! 
+//! Example with async-std:
+//! 
+//! ```rust,no_run
+//!     let client = QldbClient::default_with_spawner(
+//!         "rust-crate-test", 
+//!         200, 
+//!         Arc::new(move |fut| {async_std::task::spawn(Box::pin(fut));})
+//!     )
+//!     .await?
+//! ```
+//! 
+//! Or, with tokio:
+//! 
+//! ```rust,no_run
+//!     let client = QldbClient::default_with_spawner(
+//!         "rust-crate-test", 
+//!         200, 
+//!         Arc::new(move |fut| {tokio::spawn(Box::pin(fut));})
+//!     )
+//!     .await?
+//! ```
+//! 
+//! ## Select the pool you want to use
+//! 
+//! By default, both pools are available by using the methods `QldbClient::default` 
+//! and `QldbClient::default_with_spawner`. If you don't want the pool to be available
+//! in runtime, you can disable by removing the default features. Still, you will 
+//! need to add at least one feature to enable one pool.
+//! 
+//! This will only enable the default pool, the one that uses one thread.
+//! ```toml,no_code
+//! qldb = { version = "3", default_features = false, features = ["internal_pool_with_thread"]}
+//! ```
+//! 
+//! This will only enable the alternative pool, the one that requires an spawner
+//! ```toml,no_code
+//! qldb = { version = "3", default_features = false, features = ["internal_pool_with_spawner"]}
+//! ```
 //! 
 //! # Underlying Ion Format Implementation
 //! 

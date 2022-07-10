@@ -40,5 +40,6 @@ rand = "0.8"
 tokio = "1.19.2"
 
 [features]
-default = ["internal_pool_with_spawner"]
+default = ["internal_pool_with_spawner", "internal_pool_with_thread"]
 internal_pool_with_spawner = []
+internal_pool_with_thread = []
