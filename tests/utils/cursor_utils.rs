@@ -1,19 +1,18 @@
 #![allow(dead_code)]
 
+use crate::utils::ensure_test_table;
 use ion_binary_rs::IonValue;
 use qldb::DocumentCollection;
 use qldb::QldbClient;
 use rand::distributions::Alphanumeric;
 use rand::thread_rng;
 use rand::Rng;
-use crate::utils::ensure_test_table;
 
 const DOCUMENTS_TO_INSERT_FOR_TESTING: usize = 800;
 const DOCUMENTS_PER_QUERY: usize = 40;
 const INSERT_LOOP_COUNT: usize = DOCUMENTS_TO_INSERT_FOR_TESTING / DOCUMENTS_PER_QUERY;
 
 pub async fn cursor_800_documents_with_client(client: QldbClient) {
-
     let test_table = ensure_test_table(&client).await;
 
     let documents_model = format!("cursor_800_documents{}", rand_string());
@@ -21,10 +20,7 @@ pub async fn cursor_800_documents_with_client(client: QldbClient) {
     let table = test_table.clone();
     let _ = client
         .transaction_within(|tx| async move {
-            let _ = tx
-                .query(&format!("CREATE INDEX ON {} (Model)", &table))
-                .execute()
-                .await;
+            let _ = tx.query(&format!("CREATE INDEX ON {} (Model)", &table)).execute().await;
 
             Ok(())
         })

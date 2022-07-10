@@ -1,7 +1,10 @@
-use crate::session_pool::{Session, SessionPool, SpawnerFnMonoMultithread, agnostic_async_pool_multithread::{returning_task, receiver_task}};
-use rusoto_qldb_session::QldbSessionClient;
+use crate::session_pool::{
+    agnostic_async_pool_multithread::{receiver_task, returning_task},
+    Session, SessionPool, SpawnerFnMonoMultithread,
+};
 use async_channel::{bounded, unbounded, Sender};
 use eyre::WrapErr;
+use rusoto_qldb_session::QldbSessionClient;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering::Relaxed};
 use std::sync::{Arc, Mutex};
@@ -14,7 +17,12 @@ pub struct SpawnerSessionPool {
 }
 
 impl SpawnerSessionPool {
-    pub fn new(qldb_client: Arc<QldbSessionClient>, ledger_name: &str, max_sessions: u16, spawner: SpawnerFnMonoMultithread) -> SpawnerSessionPool {
+    pub fn new(
+        qldb_client: Arc<QldbSessionClient>,
+        ledger_name: &str,
+        max_sessions: u16,
+        spawner: SpawnerFnMonoMultithread,
+    ) -> SpawnerSessionPool {
         let (requesting_sender, requesting_receiver) = unbounded::<Sender<Session>>();
         let (returning_sender, returning_receiver) = unbounded::<Session>();
         let ledger_name = ledger_name.to_owned();
@@ -36,7 +44,7 @@ impl SpawnerSessionPool {
             &qldb_client,
             &is_closed,
             requesting_receiver,
-            requesting_sender
+            requesting_sender,
         );
 
         returning_task(

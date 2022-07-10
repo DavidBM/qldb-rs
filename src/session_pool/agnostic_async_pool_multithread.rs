@@ -1,18 +1,31 @@
-use crate::session_pool::{SpawnerFnMonoMultithread, Session, GetSessionError};
-use async_io::Timer;
-use std::time::Duration;
-use std::sync::{atomic::{AtomicBool, AtomicU16}, Arc, Mutex};
+use crate::session_pool::{GetSessionError, Session, SpawnerFnMonoMultithread};
 use async_channel::Receiver;
 use async_channel::Sender;
-use std::sync::atomic::Ordering::Relaxed;
-use std::collections::VecDeque;
-use log::error;
-use rusoto_qldb_session::{EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest};
-use rusoto_core::RusotoError;
 use async_compat::CompatExt;
+use async_io::Timer;
+use log::error;
+use rusoto_core::RusotoError;
+use rusoto_qldb_session::{EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest};
+use std::collections::VecDeque;
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::{
+    atomic::{AtomicBool, AtomicU16},
+    Arc, Mutex,
+};
+use std::time::Duration;
 
 #[allow(clippy::too_many_arguments)]
-pub fn receiver_task(spawner: SpawnerFnMonoMultithread, max_sessions: u16, ledger_name: &str, sessions: &Arc<Mutex<VecDeque<Session>>>, session_count: &Arc<AtomicU16>, qldb_client: &Arc<QldbSessionClient>, is_closed: &Arc<AtomicBool>, requesting_receiver: Receiver<Sender<Session>>, requesting_sender: Sender<Sender<Session>>) {
+pub fn receiver_task(
+    spawner: SpawnerFnMonoMultithread,
+    max_sessions: u16,
+    ledger_name: &str,
+    sessions: &Arc<Mutex<VecDeque<Session>>>,
+    session_count: &Arc<AtomicU16>,
+    qldb_client: &Arc<QldbSessionClient>,
+    is_closed: &Arc<AtomicBool>,
+    requesting_receiver: Receiver<Sender<Session>>,
+    requesting_sender: Sender<Sender<Session>>,
+) {
     let is_closed = is_closed.clone();
     let qldb_client = qldb_client.clone();
     let sessions = sessions.clone();
@@ -26,16 +39,15 @@ pub fn receiver_task(spawner: SpawnerFnMonoMultithread, max_sessions: u16, ledge
             }
 
             loop {
-                let (session, pooled_sessions_count) =
-                    match sessions.lock() {
-                        Ok(mut sessions) => (sessions.pop_back(), sessions.len()),
-                        Err(err) => {
-                            // Means that something went really wrong
-                            is_closed.store(true, Relaxed);
-                            error!("QLDB driver internal fatal error. Cannot get lock at sessions when requesting a session: {:?}", err);
-                            break;
-                        }
-                    };
+                let (session, pooled_sessions_count) = match sessions.lock() {
+                    Ok(mut sessions) => (sessions.pop_back(), sessions.len()),
+                    Err(err) => {
+                        // Means that something went really wrong
+                        is_closed.store(true, Relaxed);
+                        error!("QLDB driver internal fatal error. Cannot get lock at sessions when requesting a session: {:?}", err);
+                        break;
+                    }
+                };
 
                 if let Some(session) = session {
                     if session.is_valid() {
@@ -60,37 +72,45 @@ pub fn receiver_task(spawner: SpawnerFnMonoMultithread, max_sessions: u16, ledge
     }));
 }
 
-pub fn returning_task(spawner: SpawnerFnMonoMultithread, sessions: &Arc<Mutex<VecDeque<Session>>>, session_count: &Arc<AtomicU16>, qldb_client: &Arc<QldbSessionClient>, is_closed: &Arc<AtomicBool>, returning_receiver: Receiver<Session>) {
+pub fn returning_task(
+    spawner: SpawnerFnMonoMultithread,
+    sessions: &Arc<Mutex<VecDeque<Session>>>,
+    session_count: &Arc<AtomicU16>,
+    qldb_client: &Arc<QldbSessionClient>,
+    is_closed: &Arc<AtomicBool>,
+    returning_receiver: Receiver<Session>,
+) {
     let is_closed = is_closed.clone();
     let qldb_client = qldb_client.clone();
     let sessions = sessions.clone();
     let session_count = session_count.clone();
 
     spawner.clone()(Box::pin(async move {
+        while let Ok(session) = returning_receiver.recv().await {
+            if is_closed.load(Relaxed) {
+                break;
+            }
 
-            while let Ok(session) = returning_receiver.recv().await {
-                if is_closed.load(Relaxed) {
-                    break;
-                }
+            if !session.is_valid() {
+                close_session(spawner.clone(), &qldb_client, session, &session_count);
+                break;
+            }
 
-                if !session.is_valid() {
+            match sessions.lock() {
+                Ok(mut sessions) => sessions.push_front(session),
+                Err(err) => {
+                    // Means that something went really wrong
+                    is_closed.store(true, Relaxed);
+                    error!(
+                        "QLDB driver internal fatal error. Cannot get lock at sessions when returning a session: {:?}",
+                        err
+                    );
                     close_session(spawner.clone(), &qldb_client, session, &session_count);
                     break;
                 }
-
-                match sessions.lock() {
-                    Ok(mut sessions) => sessions.push_front(session),
-                    Err(err) => {
-                        // Means that something went really wrong
-                        is_closed.store(true, Relaxed);
-                        error!("QLDB driver internal fatal error. Cannot get lock at sessions when returning a session: {:?}", err);
-                        close_session(spawner.clone(), &qldb_client, session, &session_count);
-                        break;
-                    }
-                };
-            }
+            };
         }
-    ));
+    }));
 }
 
 fn close_session(
@@ -176,7 +196,6 @@ async fn create_session(qldb_client: &Arc<QldbSessionClient>, ledger_name: &str)
 
     Ok(Session::new(session))
 }
-
 
 async fn qldb_close_session(qldb_client: &QldbSessionClient, session: &Session) -> Result<(), eyre::Report> {
     qldb_client

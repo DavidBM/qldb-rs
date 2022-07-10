@@ -1,8 +1,11 @@
-use crate::session_pool::{Session, SessionPool, agnostic_async_pool_monothread::{returning_task, receiver_task}};
-use rusoto_qldb_session::QldbSessionClient;
+use crate::session_pool::{
+    agnostic_async_pool_monothread::{receiver_task, returning_task},
+    Session, SessionPool,
+};
 use async_channel::{bounded, unbounded, Sender};
 use async_executor::LocalExecutor;
 use eyre::WrapErr;
+use rusoto_qldb_session::QldbSessionClient;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -43,7 +46,7 @@ impl ThreadedSessionPool {
                 &qldb_client,
                 &is_closed,
                 requesting_receiver,
-                requesting_sender
+                requesting_sender,
             );
 
             returning_task(
@@ -54,7 +57,6 @@ impl ThreadedSessionPool {
                 &is_closed,
                 returning_receiver,
             );
-
 
             futures::executor::block_on(executor3.run(futures::future::pending::<()>()));
         });

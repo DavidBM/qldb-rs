@@ -1,10 +1,13 @@
-use crate::{session_pool::{ThreadedSessionPool, SessionPool}, QldbError, QldbResult, QueryBuilder, Transaction};
+#[cfg(feature = "internal_pool_with_spawner")]
+use crate::session_pool::{SpawnerFnMonoMultithread, SpawnerSessionPool};
+use crate::{
+    session_pool::{SessionPool, ThreadedSessionPool},
+    QldbError, QldbResult, QueryBuilder, Transaction,
+};
 use rusoto_core::{credential::ChainProvider, request::HttpClient, Region};
 use rusoto_qldb_session::QldbSessionClient;
 use std::future::Future;
 use std::sync::Arc;
-#[cfg(feature = "internal_pool_with_spawner")]
-use crate::session_pool::{SpawnerFnMonoMultithread, SpawnerSessionPool};
 
 /// It allows to start transactions. In QLDB all queries are transactions.
 /// So you always need to create a transaction for every query.
@@ -19,7 +22,7 @@ pub struct QldbClient {
 
 impl QldbClient {
     /// Creates a new QldbClient.
-    /// 
+    ///
     /// It will spawn one thread for the session pool.
     ///
     /// This function will take the credentials from several locations in this order:
@@ -57,8 +60,8 @@ impl QldbClient {
     }
 
     /// Creates a new QldbClient.
-    /// 
-    /// This function won't spawn a thread for the session pool, but it will require 
+    ///
+    /// This function won't spawn a thread for the session pool, but it will require
     /// to be given an spawn function so it can start 2 green threads for the session
     /// pool.
     ///
@@ -77,7 +80,11 @@ impl QldbClient {
     /// profile in ~/.aws/config or the file specified by the AWS_CONFIG_FILE environment
     /// variable. If that is malformed of absent it will fall back on Region::UsEast1
     #[cfg(feature = "internal_pool_with_spawner")]
-    pub async fn default_with_spawner(ledger_name: &str, max_sessions: u16, spawner: SpawnerFnMonoMultithread) -> QldbResult<QldbClient> {
+    pub async fn default_with_spawner(
+        ledger_name: &str,
+        max_sessions: u16,
+        spawner: SpawnerFnMonoMultithread,
+    ) -> QldbResult<QldbClient> {
         let region = Region::default();
 
         let credentials = ChainProvider::default();
@@ -87,7 +94,12 @@ impl QldbClient {
 
         let client = Arc::new(QldbSessionClient::new_with(http_client, credentials, region));
 
-        let session_pool = Arc::new(SpawnerSessionPool::new(client.clone(), ledger_name, max_sessions, spawner));
+        let session_pool = Arc::new(SpawnerSessionPool::new(
+            client.clone(),
+            ledger_name,
+            max_sessions,
+            spawner,
+        ));
 
         Ok(QldbClient {
             client,

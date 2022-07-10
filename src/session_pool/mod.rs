@@ -1,16 +1,16 @@
-mod session_pool_thread;
 mod agnostic_async_pool_monothread;
 mod agnostic_async_pool_multithread;
 #[cfg(feature = "internal_pool_with_spawner")]
 mod session_pool_spawner;
+mod session_pool_thread;
 
-use std::pin::Pin;
-use std::sync::Arc;
-use std::{time::Instant, future::Future};
-pub use session_pool_thread::ThreadedSessionPool;
+use log::error;
 #[cfg(feature = "internal_pool_with_spawner")]
 pub use session_pool_spawner::SpawnerSessionPool;
-use log::error;
+pub use session_pool_thread::ThreadedSessionPool;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::{future::Future, time::Instant};
 
 #[derive(Debug, Clone)]
 struct InnerSession {
