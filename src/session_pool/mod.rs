@@ -1,12 +1,15 @@
 mod agnostic_async_pool_monothread;
 mod agnostic_async_pool_multithread;
+mod agnostic_async_pool_shared;
 #[cfg(feature = "internal_pool_with_spawner")]
 mod session_pool_spawner;
+#[cfg(feature = "internal_pool_with_thread")]
 mod session_pool_thread;
 
 use log::error;
 #[cfg(feature = "internal_pool_with_spawner")]
 pub use session_pool_spawner::SpawnerSessionPool;
+#[cfg(feature = "internal_pool_with_thread")]
 pub use session_pool_thread::ThreadedSessionPool;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -43,7 +46,7 @@ impl Session {
 }
 
 #[derive(Debug, thiserror::Error)]
-enum GetSessionError {
+pub(crate) enum GetSessionError {
     #[error("The QLDB command returned an error")]
     Unrecoverable(eyre::Report),
     #[error("The QLDB command returned an error")]

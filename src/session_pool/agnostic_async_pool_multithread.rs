@@ -1,11 +1,10 @@
-use crate::session_pool::{GetSessionError, Session, SpawnerFnMonoMultithread};
+use crate::session_pool::agnostic_async_pool_shared::{create_session, provide_session, qldb_close_session};
+use crate::session_pool::{Session, SpawnerFnMonoMultithread};
 use async_channel::Receiver;
 use async_channel::Sender;
-use async_compat::CompatExt;
 use async_io::Timer;
 use log::error;
-use rusoto_core::RusotoError;
-use rusoto_qldb_session::{EndSessionRequest, QldbSession, QldbSessionClient, SendCommandRequest, StartSessionRequest};
+use rusoto_qldb_session::QldbSessionClient;
 use std::collections::VecDeque;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{
@@ -144,11 +143,10 @@ fn close_session(
     }));
 }
 
-fn provide_session(sender: &Sender<Session>, session: Session) {
-    // This channel should never be full or closed
-    if let Err(err) = sender.try_send(session) {
+fn requeue_session_request(session_requests: &Sender<Sender<Session>>, sender: Sender<Session>) {
+    if let Err(err) = session_requests.try_send(sender) {
         error!(
-            "QLDB driver internal error. Cannot return session due to channel issue: {:?}",
+            "QLDB driver internal error. Cannot enqueue session due pool bug: {:?}",
             err
         );
     }
@@ -163,77 +161,5 @@ async fn refill_session(
         if let Ok(mut sessions) = sessions.lock() {
             sessions.push_back(session);
         }
-    }
-}
-
-fn requeue_session_request(session_requests: &Sender<Sender<Session>>, sender: Sender<Session>) {
-    if let Err(err) = session_requests.try_send(sender) {
-        error!(
-            "QLDB driver internal error. Cannot enqueue session due pool bug: {:?}",
-            err
-        );
-    }
-}
-
-async fn create_session(qldb_client: &Arc<QldbSessionClient>, ledger_name: &str) -> Result<Session, GetSessionError> {
-    let mut tries: u32 = 0;
-
-    let session = loop {
-        tries = tries.saturating_add(1);
-
-        match qldb_request_session(qldb_client, ledger_name).await {
-            Ok(session) => break Ok(session),
-            Err(error) if tries > 10 => break Err(error),
-            Err(GetSessionError::Recoverable(_)) => {
-                Timer::after(Duration::from_millis(
-                    tries.saturating_mul(tries).saturating_mul(75).into(),
-                ))
-                .await;
-            }
-            err @ Err(GetSessionError::Unrecoverable(_)) => break err,
-        }
-    }?;
-
-    Ok(Session::new(session))
-}
-
-async fn qldb_close_session(qldb_client: &QldbSessionClient, session: &Session) -> Result<(), eyre::Report> {
-    qldb_client
-        .send_command(SendCommandRequest {
-            session_token: Some(session.get_session_id().to_string()),
-            end_session: Some(EndSessionRequest {}),
-            ..Default::default()
-        })
-        .await?;
-
-    Ok(())
-}
-
-async fn qldb_request_session(qldb_client: &QldbSessionClient, ledger_name: &str) -> Result<String, GetSessionError> {
-    match qldb_client
-        .send_command(SendCommandRequest {
-            start_session: Some(StartSessionRequest {
-                ledger_name: ledger_name.to_string(),
-            }),
-            ..Default::default()
-        })
-        .compat()
-        .await
-    {
-        Ok(response) => match response.start_session {
-            Some(session) => match session.session_token {
-                Some(token) => Ok(token),
-                None => Err(GetSessionError::Unrecoverable(eyre::eyre!(
-                    "No session present on QLDB response"
-                ))),
-            },
-            None => Err(GetSessionError::Unrecoverable(eyre::eyre!(
-                "Empty session on QLDB response"
-            ))),
-        },
-        Err(err) => match err {
-            RusotoError::Credentials(_) => Err(GetSessionError::Unrecoverable(eyre::eyre!(err))),
-            _ => Err(GetSessionError::Recoverable(eyre::eyre!(err))),
-        },
     }
 }
