@@ -1,6 +1,6 @@
 [package]
 name = "qldb"
-version = "3.2.8"
+version = "3.2.9"
 authors = ["Couragium Solutions <info@couragium.com>"]
 edition = "2021"
 
@@ -14,7 +14,7 @@ homepage = "https://crates.io/crates/qldb"
 repository = "https://github.com/Couragium/qldb-rs"
 
 [dependencies]
-ion-binary-rs = "0.8.12"
+ion-binary-rs = "0.8.13"
 num-traits = "0.2"
 rusoto_qldb_session = { version = "0.48", default_features = false, features = ["rustls", "serialize_structs", "deserialize_structs"] }
 rusoto_core = { version = "0.48", default_features = false, features = ["rustls"] }
