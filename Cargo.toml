@@ -1,10 +1,10 @@
 [package]
 name = "qldb"
-version = "3.2.9"
+version = "4.0.0"
 authors = ["Couragium Solutions <info@couragium.com>"]
 edition = "2021"
 
-description="Driver for Amazon's QLDB Database implemented in pure rust."
+description="Legacy Rust driver for the retired Amazon QLDB service."
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["QLDB", "amazon", "database", "driver", "async"]

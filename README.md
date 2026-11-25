@@ -8,7 +8,7 @@ Driver for Amazon's QLDB Database implemented in pure rust.
 [![Crates.io](https://img.shields.io/crates/v/qldb)](https://crates.io/crates/qldb)
 [![Rust](https://github.com/DavidBM/qldb-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/DavidBM/qldb-rs/actions/workflows/rust.yml)
 
-> **Service retired.** AWS shut down Amazon QLDB on July 31, 2025. This driver is retained as a reference for existing QLDB code. See the [AWS shutdown notice](https://docs.aws.amazon.com/general/latest/gr/elastictranscoder.html) and [AWS migration sample for Aurora PostgreSQL](https://github.com/aws-samples/example-qldb-ledger-migration).
+> **Service retired.** AWS shut down Amazon QLDB on July 31, 2025. This driver is retained as a reference for existing QLDB code. See the [AWS shutdown notice](https://docs.aws.amazon.com/general/latest/gr/full_shutdown_services.html) and [AWS migration sample for Aurora PostgreSQL](https://github.com/aws-samples/example-qldb-ledger-migration).
 
 ## Example
 
@@ -89,19 +89,18 @@ need to add at least one feature to enable one pool.
 
 This will only enable the default pool, the one that uses one thread.
 ```toml,no_code
-qldb = { version = "3", default_features = false, features = ["internal_pool_with_thread"]}
+qldb = { version = "4", default-features = false, features = ["internal_pool_with_thread"]}
 ```
 
 This will only enable the alternative pool, the one that requires an spawner
 ```toml,no_code
-qldb = { version = "3", default_features = false, features = ["internal_pool_with_spawner"]}
+qldb = { version = "4", default-features = false, features = ["internal_pool_with_spawner"]}
 ```
 
 # Underlying Ion Format Implementation
 
-The library uses [ion-binary-rs](https://crates.io/crates/ion-binary-rs), 
-which is our own, pure rust, implementation of the format. It is very 
-well tested and ready to use in production too.
+The driver uses the [ion-binary-rs](https://crates.io/crates/ion-binary-rs)
+0.8 API to decode historical QLDB responses.
 
 # Test
 
