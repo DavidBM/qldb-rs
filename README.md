@@ -6,9 +6,9 @@ Driver for Amazon's QLDB Database implemented in pure rust.
 
 [![Documentation](https://docs.rs/qldb/badge.svg)](https://docs.rs/qldb)
 [![Crates.io](https://img.shields.io/crates/v/qldb)](https://crates.io/crates/qldb)
-[![Rust](https://github.com/Couragium/qldb-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/Couragium/qldb-rs/actions/workflows/rust.yml)
+[![Rust](https://github.com/DavidBM/qldb-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/DavidBM/qldb-rs/actions/workflows/rust.yml)
 
-The driver is fairly tested and should be ready to test in real projects.
+> **Service retired.** AWS shut down Amazon QLDB on July 31, 2025. This driver is retained as a reference for existing QLDB code. See the [AWS shutdown notice](https://docs.aws.amazon.com/general/latest/gr/elastictranscoder.html) and [AWS migration sample for Aurora PostgreSQL](https://github.com/aws-samples/example-qldb-ledger-migration).
 
 ## Example
 
@@ -105,14 +105,8 @@ well tested and ready to use in production too.
 
 # Test
 
-For tests you will need to have some AWS credentials in your
-PC (as env variables or in ~/.aws/credentials). There needs
-to be a QLDB database with the name "rust-crate-test" in the
-aws account. The tests need to be run sequentially, so in order
-to run the tests please run the following command:
-
-```sh
-RUST_TEST_THREADS=1 cargo test
-```
+Run `cargo test --lib` and `cargo test --doc` for offline checks. The
+integration tests in `tests/` depend on a live QLDB ledger and are retained
+as reference alongside the driver.
 
 <!-- cargo-sync-readme end -->
